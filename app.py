@@ -6,12 +6,17 @@ import json
 import os
 from dotenv import load_dotenv
 from typing import Optional
+from flask_cors import CORS
 
 from datacls import FilterItem, FilterOption
 
 load_dotenv()
 
 app = Flask(__name__)
+
+# ------------ DEV ONLY ------------
+CORS(app)
+# ----------------------------------
 
 class CustomJSONEncoder(json.JSONEncoder):
     def __init__(self, **kwargs):
