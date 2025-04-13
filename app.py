@@ -4,7 +4,6 @@ from flask import Flask, Response, jsonify, request, abort
 import psycopg2
 import json
 import os
-from dacite import from_dict
 from dotenv import load_dotenv
 from typing import Optional
 
