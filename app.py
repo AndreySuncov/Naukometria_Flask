@@ -1,10 +1,14 @@
+from dataclasses import asdict
 from datetime import datetime
 from flask import Flask, Response, jsonify, request, abort
 import psycopg2
 import json
 import os
+from dacite import from_dict
 from dotenv import load_dotenv
 from typing import Optional
+
+from datacls import FilterItem, FilterOption
 
 load_dotenv()
 
@@ -604,6 +608,81 @@ def get_keywords():
     finally:
         if cur: cur.close()
         if conn: conn.close()
+
+@app.route("/api/graph/authors/filters", methods=["GET"])
+async def get_authors_graph_filters_data():
+    def get_filter_options(query: str, cur) -> list[FilterOption]:
+        cur.execute(query)
+        return [FilterOption(row[0], row[1]) for row in cur.fetchall()]
+
+
+    conn = cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        authors_query = """
+            SELECT lastname || ' ' ||
+                (SELECT string_agg(LEFT(TRIM(word), 1) || '.', '')
+                    FROM unnest(string_to_array(regexp_replace(initials, '[.]', ' ', 'g'), ' ')) AS word
+                    WHERE TRIM(word) <> '') AS label,
+                authorid AS value
+            FROM (
+                SELECT DISTINCT ON (authorid) *
+                FROM authors
+                WHERE authorid IS NOT NULL
+                ORDER BY authorid,
+                        CASE WHEN language = 'RU' THEN 0 ELSE 1 END
+            ) AS preferred_authors
+            ORDER BY label;
+        """
+        organizations_query = "SELECT organizationname AS label, organizationid AS value FROM elibrary_organizations WHERE organizationid IS NOT NULL ORDER BY label;"
+        keywords_query = "SELECT keyword AS label, itemid AS value FROM keywords WHERE itemid IS NOT NULL ORDER BY label;"
+        # specializations_query = "SELECT DISTINCT specialty AS label, specialty AS value FROM authors WHERE specialty IS NOT NULL ORDER BY label;"
+        cities_query = "SELECT DISTINCT town AS label, town as value FROM affiliations WHERE town IS NOT NULL ORDER BY label;"
+
+        authors_filters = [
+            FilterItem(
+                name="author",
+                label="Фамилия И.О. автора",
+                options=get_filter_options(authors_query, cur),
+                isMultiSelect=False,
+            ),
+            FilterItem(
+                name="organization",
+                label="Организация",
+                options=get_filter_options(organizations_query, cur),
+                isMultiSelect=False,
+            ),
+            FilterItem(
+                name="keywords",
+                label="Ключевые слова",
+                options=get_filter_options(keywords_query, cur),
+                isMultiSelect=False,
+            ),
+            # FilterItem(
+            #     name="specialty",
+            #     label="Фильтр специальности",
+            #     options=get_filter_options(specializations_query, cur),
+            #     isMultiSelect=False,
+            # ),
+            FilterItem(
+                name="city",
+                label="Город",
+                options=get_filter_options(cities_query, cur),
+                isMultiSelect=False,
+            ),
+        ]
+        return Response(json.dumps([asdict(filter) for filter in authors_filters], ensure_ascii=False))
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+
+
 
 @app.errorhandler(404)
 def not_found(error):
