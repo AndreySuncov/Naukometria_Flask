@@ -1,16 +1,22 @@
-from dataclasses import asdict
-from datetime import datetime
-from flask import Flask, Response, jsonify, request, abort
-import psycopg2
 import json
-import os
-from dotenv import load_dotenv
+import logging
+from datetime import datetime
 from typing import Optional
+
+from flask import Flask, Response, abort, jsonify, request, url_for
 from flask_cors import CORS
 
-from datacls import FilterItem, FilterOption
+from src.database.database import get_db_connection
+from src.graph import graph_bp
 
-load_dotenv()
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+
 
 app = Flask(__name__)
 
@@ -25,13 +31,6 @@ class CustomJSONEncoder(json.JSONEncoder):
 
 app.json_encoder = CustomJSONEncoder
 
-DB_CONFIG = {
-    "host": os.getenv("DB_HOST"),
-    "dbname": os.getenv("DB_NAME"),
-    "user": os.getenv("DB_USER"),
-    "password": os.getenv("DB_PASSWORD"),
-    "port": os.getenv("DB_PORT", 5432)
-}
 
 def validate_int(
     value: Optional[str],
@@ -49,14 +48,11 @@ def validate_int(
     except ValueError:
         abort(400, description=f"Invalid {param_name} value")
 
+
 def validate_enum(value: Optional[str], allowed_values: set, param_name: str):
     if value and value.lower() not in {v.lower() for v in allowed_values}:
         abort(400, description=f"Invalid {param_name}. Allowed values: {', '.join(allowed_values)}")
 
-def get_db_connection():
-    conn = psycopg2.connect(**DB_CONFIG)
-    conn.set_client_encoding('UTF8')
-    return conn
 
 @app.route('/api/references/<ref_type>', methods=['GET'])
 def get_references(ref_type):
@@ -613,80 +609,25 @@ def get_keywords():
         if cur: cur.close()
         if conn: conn.close()
 
-@app.route("/api/graph/authors/filters", methods=["GET"])
-def get_authors_graph_filters_data():
-    def get_filter_options(query: str, cur) -> list[FilterOption]:
-        cur.execute(query)
-        return [FilterOption(row[0], row[1]) for row in cur.fetchall()]
 
+app.register_blueprint(graph_bp)
 
-    conn = cur = None
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
+def has_no_empty_params(rule):
+    defaults = rule.defaults if rule.defaults is not None else ()
+    arguments = rule.arguments if rule.arguments is not None else ()
 
-        authors_query = """
-            SELECT lastname || ' ' ||
-                (SELECT string_agg(LEFT(TRIM(word), 1) || '.', '')
-                    FROM unnest(string_to_array(regexp_replace(initials, '[.]', ' ', 'g'), ' ')) AS word
-                    WHERE TRIM(word) <> '') AS label,
-                authorid AS value
-            FROM (
-                SELECT DISTINCT ON (authorid) *
-                FROM authors
-                WHERE authorid IS NOT NULL
-                ORDER BY authorid,
-                        CASE WHEN language = 'RU' THEN 0 ELSE 1 END
-            ) AS preferred_authors
-            ORDER BY label;
-        """
-        organizations_query = "SELECT organizationname AS label, organizationid AS value FROM elibrary_organizations WHERE organizationid IS NOT NULL ORDER BY label;"
-        keywords_query = "SELECT keyword AS label, itemid AS value FROM keywords WHERE itemid IS NOT NULL ORDER BY label;"
-        # specializations_query = "SELECT DISTINCT specialty AS label, specialty AS value FROM authors WHERE specialty IS NOT NULL ORDER BY label;"
-        cities_query = "SELECT DISTINCT town AS label, town as value FROM affiliations WHERE town IS NOT NULL ORDER BY label;"
+    return len(defaults) >= len(arguments)
 
-        authors_filters = [
-            FilterItem(
-                name="author",
-                label="Фамилия И.О. автора",
-                options=get_filter_options(authors_query, cur),
-                isMultiSelect=False,
-            ),
-            FilterItem(
-                name="organization",
-                label="Организация",
-                options=get_filter_options(organizations_query, cur),
-                isMultiSelect=False,
-            ),
-            FilterItem(
-                name="keywords",
-                label="Ключевые слова",
-                options=get_filter_options(keywords_query, cur),
-                isMultiSelect=False,
-            ),
-            # FilterItem(
-            #     name="specialty",
-            #     label="Фильтр специальности",
-            #     options=get_filter_options(specializations_query, cur),
-            #     isMultiSelect=False,
-            # ),
-            FilterItem(
-                name="city",
-                label="Город",
-                options=get_filter_options(cities_query, cur),
-                isMultiSelect=False,
-            ),
-        ]
-        return Response(json.dumps([asdict(filter) for filter in authors_filters], ensure_ascii=False))
+@app.route("/site-map")
+def site_map_route():
+    routes = []
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        if cur: cur.close()
-        if conn: conn.close()
+    for rule in app.url_map.iter_rules():
+        if "GET" in rule.methods and has_no_empty_params(rule): # type: ignore
+            url = url_for(rule.endpoint, **(rule.defaults or {}))
+            routes.append((url, rule.endpoint))
 
-
-
+    return routes
 
 @app.errorhandler(404)
 def not_found(error):
@@ -698,3 +639,5 @@ def home():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=True)
+    # conn = get_db_connection()
+    # cur = conn.cursor()
