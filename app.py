@@ -609,7 +609,7 @@ def get_keywords():
         if conn: conn.close()
 
 @app.route("/api/graph/authors/filters", methods=["GET"])
-async def get_authors_graph_filters_data():
+def get_authors_graph_filters_data():
     def get_filter_options(query: str, cur) -> list[FilterOption]:
         cur.execute(query)
         return [FilterOption(row[0], row[1]) for row in cur.fetchall()]
