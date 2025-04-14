@@ -28,15 +28,18 @@ def get_db_connection(schema: SchemaType = "public") -> psycopg2.extensions.conn
 
 class DatabaseService:
     def __init__(self, schema: SchemaType = "public") -> None:
-        self.conn = get_db_connection(schema)
-        self.cur = self.conn.cursor()
+        self.schema: SchemaType = schema
+        self.conn: psycopg2.extensions.connection | None = None
+        self.cur: psycopg2.extensions.cursor | None = None
 
-    def __enter__(self):
+    def __enter__(self) -> psycopg2.extensions.cursor:
+        self.conn = get_db_connection(self.schema)
+        self.cur = self.conn.cursor()
         return self.cur
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         logging.debug("Closing database connection")
-        if self.conn:
-            self.conn.close()
         if self.cur:
             self.cur.close()
+        if self.conn:
+            self.conn.close()
