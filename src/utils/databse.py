@@ -27,7 +27,7 @@ def fetch_paginated_options(
     offset = (page - 1) * per_page
 
     try:
-        with DatabaseService() as cur:
+        with DatabaseService("new_data") as cur:
             where_clauses = [f"{value_column} IS NOT NULL"]
             if base_filter:
                 where_clauses.append(base_filter)
