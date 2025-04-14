@@ -17,6 +17,8 @@ class AuthorsFilters:
 
 
 def get_filtered_authors(filters: AuthorsFilters, cur):
+    raise NotImplementedError("getFilteredAffiliations is not implemented yet")
+
     query = """
         SELECT a.authorid,
             a.lastname,
@@ -68,7 +70,7 @@ def get_filtered_authors(filters: AuthorsFilters, cur):
 def get_authors_graph_data():
     try:
         filters: AuthorsFilters = from_dict(AuthorsFilters, request.get_json())
-        logging.info(f"Received filters: {filters}")
+        logging.debug(f"Received filters: {filters}")
 
         with DatabaseService() as cur:
             authors_query = """

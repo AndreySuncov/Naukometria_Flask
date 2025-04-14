@@ -2,10 +2,14 @@ from flask import Blueprint, jsonify
 
 from ..utils.databse import fetch_paginated_options
 from .authors import authors_bp
+from .references import references_bp
+from .organizations import organizations_bp
 
 graph_bp = Blueprint("graph", __name__, url_prefix="/api/graph")
 
 graph_bp.register_blueprint(authors_bp)
+graph_bp.register_blueprint(references_bp)
+graph_bp.register_blueprint(organizations_bp)
 
 
 @graph_bp.route("/filters/authors", methods=["GET"])
