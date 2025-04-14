@@ -635,7 +635,7 @@ def not_found(error):
 
 @app.route('/')
 def home():
-    return "Электронная библиотека API v2.4 Андрей Сунцов"
+    return "Электронная библиотека API v2.5 Андрей Сунцов"
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=True)
