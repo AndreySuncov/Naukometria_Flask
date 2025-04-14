@@ -18,6 +18,6 @@ jobs:
             cd /root/Naukometria_Flask
             git pull origin main
             source /root/venv/bin/activate
-            pip install requirements.txt
+            pip install -r /root/Naukometria_Flask/requirements.txt
             sudo systemctl daemon-reload
             sudo systemctl restart flask-app
