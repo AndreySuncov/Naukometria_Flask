@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Literal
 
 import psycopg2
 from dotenv import load_dotenv
@@ -16,15 +17,18 @@ DB_CONFIG = {
 }
 
 
-def get_db_connection():
-    conn = psycopg2.connect(**DB_CONFIG)
+type SchemaType = Literal["public", "new_data"]
+
+
+def get_db_connection(schema: SchemaType = "public") -> psycopg2.extensions.connection:
+    conn = psycopg2.connect(**DB_CONFIG, options=f"-c search_path={schema}")
     conn.set_client_encoding("UTF8")
     return conn
 
 
 class DatabaseService:
-    def __init__(self) -> None:
-        self.conn = get_db_connection()
+    def __init__(self, schema: SchemaType = "public") -> None:
+        self.conn = get_db_connection(schema)
         self.cur = self.conn.cursor()
 
     def __enter__(self):
