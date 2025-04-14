@@ -21,7 +21,7 @@ logging.basicConfig(
 app = Flask(__name__)
 
 # ------------ DEV ONLY ------------
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}}, methods=["GET", "POST", "PUT", "DELETE"])
 # ----------------------------------
 
 class CustomJSONEncoder(json.JSONEncoder):

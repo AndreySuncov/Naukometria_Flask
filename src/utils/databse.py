@@ -47,10 +47,9 @@ def fetch_paginated_options(
                 params.append(f"%{q}%")
             params.extend([per_page + 1, offset])
 
-            print(full_query)
+            logging.debug("query: %s", full_query)
             cur.execute(full_query, params if params else None)
             rows = cur.fetchall()
-            print(rows[:3])
             items = [{"value": row[0], "label": row[1]} for row in rows[:per_page]]
             has_more = len(rows) > per_page
 
