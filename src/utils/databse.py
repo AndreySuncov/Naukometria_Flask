@@ -7,7 +7,13 @@ from src.database.database import DatabaseService
 
 
 def fetch_paginated_options(
-    query: str, label_column: str, value_column: str, base_filter: str = "", default_per_page: int = 20
+    query: str,
+    label_column: str,
+    value_column: str,
+    base_filter: str = "",
+    default_per_page: int = 20,
+    order_by_label: bool = True,
+    not_null_value: bool = True,
 ) -> dict[str, Any]:
     """Универсальная функция для получения данных с пагинацией и поиском
 
@@ -27,8 +33,8 @@ def fetch_paginated_options(
     offset = (page - 1) * per_page
 
     try:
-        with DatabaseService() as cur:
-            where_clauses = [f"{value_column} IS NOT NULL"]
+        with DatabaseService("new_data") as cur:
+            where_clauses = [f"{value_column} IS NOT NULL"] if not_null_value else []
             if base_filter:
                 where_clauses.append(base_filter)
             if q:
@@ -36,9 +42,8 @@ def fetch_paginated_options(
 
             where_stmt = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
             full_query = f"""
-                {query}
-                {where_stmt}
-                ORDER BY {label_column}
+                {query.format(where_clauses=where_stmt)}
+                {f"ORDER BY {label_column}" if order_by_label else ""}
                 LIMIT %s OFFSET %s;
             """
 
