@@ -18,7 +18,10 @@ class ReferencesFilters(GraphFilter):
 
 
 def get_filtered_references(filters: ReferencesFilters, cur):
-    logging.critical("Получение данных о совместных работах авторов невозможно с текущеми данными")
+    """
+    Пока невозможно получить данные о цитированиях авторов
+    """
+    logging.critical("Получение данных о цитированиях авторов невозможно с текущеми данными")
     raise NotImplementedError("get_filtered_references is not implemented yet")
     return {
         "nodes": [],
