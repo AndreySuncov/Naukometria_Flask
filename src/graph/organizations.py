@@ -32,48 +32,47 @@ def get_filtered_organizations(filters: OrganizationsFilters, cur: psycopg2.exte
     logging.critical("Получение данных о совместных работах организаций пока работает некорректно")
     query_temp_table = """
         CREATE TEMP TABLE filtered_orgs AS
-        SELECT DISTINCT aff.name AS orgname, a.itemid AS itemid
-        FROM affiliations aff
+        SELECT DISTINCT eo.organizationid AS id, eo.organizationname AS orgname, a.itemid AS itemid
+        FROM elibrary_organizations eo
+                JOIN affiliations aff ON aff.affiliationid = eo.organizationid
                 JOIN authors a ON aff.author = a.id
                 JOIN keywords k ON a.itemid = k.itemid
         WHERE k.keyword IN (%s);
-        
+
         CREATE TEMP TABLE related_orgs AS
-        SELECT DISTINCT aff.name AS orgname, a.itemid AS itemid
-        FROM affiliations aff
-                JOIN authors a ON aff.author = a.id
-                JOIN authors a2 ON a.authorid = a2.authorid
-                JOIN authors a3 ON a2.itemid = a3.itemid
-        WHERE EXISTS (
-            SELECT 1 FROM filtered_orgs fo WHERE fo.itemid = a3.itemid
-        )
-        AND NOT EXISTS (
-            SELECT 1 FROM filtered_orgs fo WHERE fo.orgname = aff.name
-        );
-        
-        CREATE TEMP TABLE orgs AS 
-        SELECT orgname AS id, orgname, itemid, 1 AS category
+        SELECT DISTINCT eo.organizationid AS id, eo.organizationname AS orgname, aff_authors.itemid AS itemid
+        FROM elibrary_organizations eo
+                JOIN affiliations aff ON aff.affiliationid = eo.organizationid
+                JOIN authors aff_authors ON aff.author = aff_authors.id
+                JOIN authors other_author_items ON aff_authors.authorid = other_author_items.authorid
+                JOIN authors related_authors ON other_author_items.itemid = related_authors.itemid
+                JOIN filtered_orgs fo ON related_authors.itemid = fo.itemid
+                LEFT JOIN filtered_orgs self_check ON self_check.id = eo.organizationid
+        WHERE self_check.id IS NULL;
+
+        CREATE TEMP TABLE orgs_items AS
+        SELECT id, orgname, itemid, 1 AS category
         FROM filtered_orgs
         UNION
-        SELECT orgname AS id, orgname, itemid, 0 AS category
+        SELECT id, orgname, itemid, 0 AS category
         FROM related_orgs;
     """
 
     query_nodes = """
         SELECT id, orgname, COUNT(itemid), category
-        FROM orgs
+        FROM orgs_items
         GROUP BY id, orgname, category;
     """
 
     query_edges = """
-        SELECT o1.orgname, o2.orgname, COUNT(DISTINCT o1.itemid)
+        SELECT o1.id, o2.id, COUNT(DISTINCT o1.itemid)
         FROM filtered_orgs o1
-        JOIN authors a1 ON o1.itemid = a1.itemid
-        JOIN authors a2 ON a1.authorid = a2.authorid
-        JOIN authors a3 ON a2.itemid = a3.itemid
-        JOIN orgs o2 ON o1.itemid = a3.itemid
-        WHERE o1.orgname < o2.orgname 
-        GROUP BY o1.orgname, o2.orgname;
+                JOIN authors aff_authors ON o1.itemid = aff_authors.itemid
+                JOIN authors other_author_items ON aff_authors.authorid = other_author_items.authorid
+                JOIN authors related_authors ON other_author_items.itemid = related_authors.itemid
+                JOIN orgs_items o2 ON o1.itemid = related_authors.itemid
+        WHERE o1.id < o2.id
+        GROUP BY o1.id, o2.id;
     """
 
     cur.execute(query_temp_table, filters.keywords)
