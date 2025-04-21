@@ -17,7 +17,7 @@ DB_CONFIG = {
 }
 
 
-type SchemaType = Literal["public", "new_data"]
+SchemaType = Literal["new_data"]
 
 
 def get_db_connection(schema: SchemaType = "new_data") -> psycopg2.extensions.connection:

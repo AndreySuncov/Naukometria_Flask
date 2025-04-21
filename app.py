@@ -480,6 +480,55 @@ def get_publications_by_year():
             conn.close()
 
 
+@app.route("/api/statistics/keywords", methods=["GET"])
+def get_keywords_statistics():
+    conn = cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Если год не указан — берем текущий
+        year = request.args.get("year")
+        if year is not None:
+            year = validate_int(year, 1900, 2100, "year")
+        else:
+            year = datetime.now().year
+
+        keyword_filter = request.args.get("keyword")
+        language_filter = request.args.get("language")
+
+        query = """
+            SELECT keyword, language, COUNT(*) AS count
+            FROM keyword_year_view
+            WHERE year = %s
+        """
+        params = [year]
+
+        if keyword_filter:
+            query += " AND keyword ILIKE %s"
+            params.append(f"%{keyword_filter}%")
+        if language_filter:
+            validate_enum(language_filter, {"ru", "en"}, "language")
+            query += " AND language = %s"
+            params.append(language_filter.upper())
+
+        query += " GROUP BY keyword, language ORDER BY count DESC"
+
+        cur.execute(query, params)
+        results = [{"keyword": row[0], "language": row[1], "count": row[2]} for row in cur.fetchall()]
+
+        return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+
 @app.route("/api/keywords/all", methods=["GET"])
 def get_all_keywords():
     conn = cur = None
