@@ -251,3 +251,46 @@ def test_all_keywords(client):
         assert isinstance(entry[0], str)  # keyword
         assert isinstance(entry[1], int)  # count
         assert entry[1] > 0
+
+
+def test_keywords_statistics_endpoint(client):
+    # Базовый тест: получить статистику по ключевым словам за текущий год
+    response = client.get('/api/statistics/keywords')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+
+    assert isinstance(data, list)
+    assert len(data) <= 150  # Проверяем лимит в 150
+    for entry in data:
+        assert isinstance(entry, dict)
+        assert 'keyword' in entry
+        assert 'language' in entry
+        assert 'count' in entry
+        assert isinstance(entry['keyword'], str)
+        assert isinstance(entry['language'], str)
+        assert isinstance(entry['count'], int)
+        assert entry['count'] > 0
+
+    # Тест: получить статистику за конкретный год
+    response = client.get('/api/statistics/keywords?year=2020')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert isinstance(data, list)
+    for entry in data:
+        assert isinstance(entry['keyword'], str)
+        assert isinstance(entry['count'], int)
+
+    # Тест: фильтрация по ключевому слову
+    response = client.get('/api/statistics/keywords?keyword=интернет')
+    assert response.status_code in [200, 404]  # Может быть пустой результат
+    if response.status_code == 200:
+        data = json.loads(response.data)
+        for entry in data:
+            assert 'интернет' in entry['keyword'].lower()
+
+    # Тест: фильтрация по языку
+    response = client.get('/api/statistics/keywords?language=ru')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    for entry in data:
+        assert entry['language'].upper() == 'RU'
