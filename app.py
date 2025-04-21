@@ -512,7 +512,7 @@ def get_keywords_statistics():
             query += " AND language = %s"
             params.append(language_filter.upper())
 
-        query += " GROUP BY keyword, language ORDER BY count DESC"
+        query += " GROUP BY keyword, language ORDER BY count DESC LIMIT 150"
 
         cur.execute(query, params)
         results = [{"keyword": row[0], "language": row[1], "count": row[2]} for row in cur.fetchall()]
