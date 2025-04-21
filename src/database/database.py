@@ -20,14 +20,14 @@ DB_CONFIG = {
 type SchemaType = Literal["public", "new_data"]
 
 
-def get_db_connection(schema: SchemaType = "public") -> psycopg2.extensions.connection:
+def get_db_connection(schema: SchemaType = "new_data") -> psycopg2.extensions.connection:
     conn = psycopg2.connect(**DB_CONFIG, options=f"-c search_path={schema}")
     conn.set_client_encoding("UTF8")
     return conn
 
 
 class DatabaseService:
-    def __init__(self, schema: SchemaType = "public") -> None:
+    def __init__(self, schema: SchemaType = "new_data") -> None:
         self.schema: SchemaType = schema
         self.conn: psycopg2.extensions.connection | None = None
         self.cur: psycopg2.extensions.cursor | None = None
