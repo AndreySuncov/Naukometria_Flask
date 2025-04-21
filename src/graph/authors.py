@@ -16,7 +16,7 @@ authors_bp = Blueprint("authors", __name__, url_prefix="/authors")
 @dataclass
 class AuthorsFilters(GraphFilter):
     authors: list[int] = field(default_factory=list)
-    organizations: list[str] = field(default_factory=list)
+    organizations: list[int] = field(default_factory=list)
     keywords: list[str] = field(default_factory=list)
     cities: list[str] = field(default_factory=list)
 
@@ -52,7 +52,7 @@ def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.curso
         where_clauses.append("a.authorid IN %s")
         params.append(tuple(filters.authors))
     if filters.organizations:
-        where_clauses.append("aff.name IN %s")
+        where_clauses.append("aff.affiliationid IN %s")
         params.append(tuple(filters.organizations))
     if filters.keywords:
         where_clauses.append("k.keyword IN %s")
