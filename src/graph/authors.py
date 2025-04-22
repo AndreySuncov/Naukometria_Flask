@@ -1,7 +1,8 @@
+import json
 from dataclasses import dataclass, field
 import logging
 from dacite import from_dict
-from flask import Blueprint, abort, jsonify, request
+from flask import Blueprint, abort, jsonify, request, Response
 import psycopg2
 
 from ..utils.graph import tuples_to_graph_links, tuples_to_graph_nodes
@@ -19,6 +20,12 @@ class AuthorsFilters(GraphFilter):
     organizations: list[int] = field(default_factory=list)
     keywords: list[str] = field(default_factory=list)
     cities: list[str] = field(default_factory=list)
+
+
+@dataclass
+class CitationsFilters(GraphFilter):
+    authors: list[int] = field(default_factory=list)  # цитируемые авторы
+    citing_authors: list[int] = field(default_factory=list)  # кто цитирует
 
 
 def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.cursor):
@@ -124,46 +131,68 @@ def get_authors_graph_data():
         logging.exception(e)
         return jsonify({"error": str(e)}), 500
 
-@authors_bp.route("/citations", methods=["GET"])
+@authors_bp.route("/citations", methods=["POST"])
 def get_citation_graph():
     try:
+        filters: CitationsFilters = from_dict(CitationsFilters, request.get_json())
+        logging.debug(f"Received citation filters: {filters}")
+
+        query = """
+            SELECT DISTINCT
+                a.authorid,
+                c.lastname || ' ' || c.initials AS author_name,
+                b.authorid AS citing_author,
+                b.lastname || ' ' || b.initials AS citing_author_name,
+                a.author_item_id,
+                d.title AS author_item_title,
+                a.citing,
+                e.title AS citing_item_title
+            FROM new_data.author_citations_view a
+            JOIN new_data.authors b ON b.itemid = a.citing
+            JOIN new_data.authors c ON c.itemid = a.author_item_id
+            JOIN new_data.items d ON d.itemid = a.author_item_id
+            JOIN new_data.items e ON e.itemid = a.citing
+            WHERE TRUE
+        """
+
+        params = []
+        if filters.authors:
+            query += " AND c.authorid IN %s"
+            params.append(tuple(filters.authors))
+        if filters.citing_authors:
+            query += " AND b.authorid IN %s"
+            params.append(tuple(filters.citing_authors))
+
         with DatabaseService("new_data") as cur:
-            cur.execute("SELECT * FROM new_data.author_citations_view")
+            cur.execute(query, params)
             rows = cur.fetchall()
 
-        # Убираем повторяющиеся ноды по author_id
         authors = {}
         for row in rows:
-            author_id = row[0]
-            author_name = row[1]
-            citing_author_id = row[2]
-            citing_author_name = row[3]
-            if author_id not in authors:
-                authors[author_id] = author_name
-            if citing_author_id not in authors:
-                authors[citing_author_id] = citing_author_name
+            authors[row[0]] = row[1]
+            authors[row[2]] = row[3]
 
-        # Ноды графа
         nodes = [
-            {"id": author_id, "name": name}
-            for author_id, name in authors.items()
+            {"id": str(aid), "name": name}
+            for aid, name in authors.items()
         ]
 
-        # Рёбра графа (направленные)
         links = [
             {
-                "source": row[2],  # citing_author
-                "target": row[0],  # author_id
-                "title": f"{row[6]} → {row[4]}",  # citing_item_title → author_item_title
+                "source": str(row[2]),
+                "target": str(row[0]),
+                "title": f"{row[7]} → {row[5]}"
             }
             for row in rows
         ]
 
-        return jsonify({
+        result = {
             "nodes": nodes,
             "links": links,
-            "categories": [{"name": "Автор"}],
-        })
+            "categories": [{"name": "Автор"}]
+        }
+
+        return Response(json.dumps(result, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
     except Exception as e:
         logging.exception(e)
