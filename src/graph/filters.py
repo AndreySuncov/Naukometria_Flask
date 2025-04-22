@@ -25,13 +25,11 @@ def get_authors_filter():
 @filters_bp.route("/organizations", methods=["GET"])
 def get_organizations_filter():
     query = """
-        SELECT
-            DISTINCT name,
-            name
-        FROM affiliations
+        SELECT DISTINCT organizationid, organizationname
+        FROM elibrary_organizations
         {where_clauses}
     """
-    data = fetch_paginated_options(query=query, label_column="name", value_column="name")
+    data = fetch_paginated_options(query=query, label_column="organizationname", value_column="organizationid")
     return jsonify(data)
 
 
