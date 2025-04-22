@@ -123,3 +123,50 @@ def get_authors_graph_data():
     except Exception as e:  # pylint: disable=broad-except
         logging.exception(e)
         return jsonify({"error": str(e)}), 500
+
+@authors_bp.route("/citations", methods=["GET"])
+def get_citation_graph():
+    try:
+        with DatabaseService("new_data") as cur:
+            cur.execute("SELECT * FROM new_data.author_citations_view")
+            rows = cur.fetchall()
+
+        # Убираем повторяющиеся ноды по author_id
+        authors = {}
+        for row in rows:
+            author_id = row[0]
+            author_name = row[1]
+            citing_author_id = row[2]
+            citing_author_name = row[3]
+            if author_id not in authors:
+                authors[author_id] = author_name
+            if citing_author_id not in authors:
+                authors[citing_author_id] = citing_author_name
+
+        # Ноды графа
+        nodes = [
+            {"id": author_id, "name": name}
+            for author_id, name in authors.items()
+        ]
+
+        # Рёбра графа (направленные)
+        links = [
+            {
+                "source": row[2],  # citing_author
+                "target": row[0],  # author_id
+                "title": f"{row[6]} → {row[4]}",  # citing_item_title → author_item_title
+            }
+            for row in rows
+        ]
+
+        return jsonify({
+            "nodes": nodes,
+            "links": links,
+            "categories": [{"name": "Автор"}],
+        })
+
+    except Exception as e:
+        logging.exception(e)
+        return jsonify({"error": str(e)}), 500
+
+
