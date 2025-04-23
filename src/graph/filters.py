@@ -21,7 +21,7 @@ def get_authors_filter():
                    END AS lang_priority,
                    LENGTH(COALESCE(lastname, '') || ' ' || COALESCE(initials, '')) AS name_length
             FROM authors
-            ORDER BY authorid, lang_priority, name_length DESC  # Добавлено для корректного DISTINCT ON
+            ORDER BY authorid, lang_priority, name_length DESC
         ) AS sub
         {where_clauses}
         ORDER BY lang_priority, name_length DESC
@@ -30,7 +30,7 @@ def get_authors_filter():
         query=query,
         label_column="name",
         value_column="value",
-        order_by_label=False  # Отключаем автоматический ORDER BY
+        order_by_label=False
     )
     return jsonify(data)
 
