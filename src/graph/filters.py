@@ -21,15 +21,18 @@ def get_authors_filter():
                    END AS lang_priority,
                    LENGTH(COALESCE(lastname, '') || ' ' || COALESCE(initials, '')) AS name_length
             FROM authors
+            ORDER BY authorid, lang_priority, name_length DESC  # Добавлено для корректного DISTINCT ON
         ) AS sub
         {where_clauses}
         ORDER BY lang_priority, name_length DESC
     """
-    data = fetch_paginated_options(query=query, label_column="name", value_column="value", order_by_label=False)
+    data = fetch_paginated_options(
+        query=query,
+        label_column="name",
+        value_column="value",
+        order_by_label=False  # Отключаем автоматический ORDER BY
+    )
     return jsonify(data)
-
-
-
 
 
 @filters_bp.route("/organizations", methods=["GET"])
