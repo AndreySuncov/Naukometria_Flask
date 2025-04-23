@@ -936,10 +936,11 @@ def get_top_keywords_by_organization():
             ORDER BY count DESC
             LIMIT %s
         """
-        cur.execute(query, (f"%{organizationid}%", min_count, limit))
+        cur.execute(query, (int(organizationid), min_count, limit))
         results = [[row[0], row[1]] for row in cur.fetchall()]
 
-        return jsonify(results)  # Возвращаем массив напрямую
+        return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
+
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
