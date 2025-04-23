@@ -578,9 +578,13 @@ def get_vak_statistics_by_category():
         author_id = request.args.get('authorid')
         date_from = request.args.get('date_from')  # формат YYYY-MM-DD
         date_to = request.args.get('date_to')      # формат YYYY-MM-DD
+        issn = request.args.get('issn')            # фильтр по журналу
 
+        # Валидации
         if author_id and not author_id.isdigit():
             abort(400, description="authorid must be an integer")
+        if issn and not issn.replace('-', '').isalnum():
+            abort(400, description="Invalid ISSN format")
 
         conn = get_db_connection()
         cur = conn.cursor()
@@ -607,6 +611,10 @@ def get_vak_statistics_by_category():
             query += " AND (date_end IS NULL OR date_end <= %s)"
             params.append(date_to)
 
+        if issn:
+            query += " AND issn = %s"
+            params.append(issn)
+
         query += """
             GROUP BY scientificspecialties, category
             ORDER BY scientificspecialties, category
@@ -615,14 +623,41 @@ def get_vak_statistics_by_category():
         cur.execute(query, params)
         data = cur.fetchall()
 
-        # Преобразуем в { "специальность": { "К1": count, "К2": count, "К3": count } }
         result = {}
         for specialty, category, count in data:
             if specialty not in result:
                 result[specialty] = {"К1": 0, "К2": 0, "К3": 0}
             result[specialty][category] = count
 
-        return Response(json.dumps(result, ensure_ascii=False), mimetype="application/json; charset=utf-8")
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.route('/api/references/journals', methods=['GET'])
+def get_journals_reference():
+    conn = cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        query = """
+            SELECT DISTINCT issn, journal_name
+            FROM new_data.author_journal_vak
+            WHERE issn IS NOT NULL AND journal_name IS NOT NULL
+            ORDER BY journal_name
+        """
+
+        cur.execute(query)
+        results = [{"issn": row[0], "name": row[1]} for row in cur.fetchall()]
+
+        return jsonify(results)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
