@@ -152,7 +152,7 @@ def get_citation_graph():
 
         params = []
         if filters.authors:
-            query += " AND authorid IN %s"
+            query += " AND author_id IN %s"
             params.append(tuple(filters.authors))
         if filters.citing_authors:
             query += " AND citing_author IN %s"
