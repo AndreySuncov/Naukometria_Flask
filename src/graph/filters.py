@@ -12,27 +12,28 @@ def get_authors_filter():
         SELECT value, name
         FROM (
             SELECT DISTINCT ON (authorid)
-                   authorid AS value,
-                   INITCAP(COALESCE(lastname, '') || ' ' || COALESCE(initials, '')) AS name,
-                   CASE
-                       WHEN language = 'RU' THEN 0
-                       WHEN language = 'EN' THEN 1
-                       ELSE 2
-                   END AS lang_priority,
-                   LENGTH(COALESCE(lastname, '') || ' ' || COALESCE(initials, '')) AS name_length
+                authorid AS value,
+                INITCAP(COALESCE(lastname, '') || ' ' || COALESCE(initials, '')) AS name,
+                CASE
+                    WHEN language = 'RU' THEN 0
+                    WHEN language = 'EN' THEN 1
+                    ELSE 2
+                END AS lang_priority,
+                LENGTH(COALESCE(lastname, '') || ' ' || COALESCE(initials, '')) AS name_length
             FROM authors
             ORDER BY authorid, lang_priority, name_length DESC
         ) AS sub
-        {where_clauses}  -- вот тут будет ILIKE name, и name уже существует
-        ORDER BY name
-    """
+        {where_clauses}
+    """  # <--- Убрал ORDER BY отсюда
+
     data = fetch_paginated_options(
         query=query,
-        label_column="name",     # фильтрация по name (он есть!)
-        value_column="value",    # value = authorid
-        order_by_label=False     # сортируем вручную
+        label_column="name",
+        value_column="value",
+        order_by_label=True  # По умолчанию — включено
     )
     return jsonify(data)
+
 
 
 
