@@ -629,7 +629,7 @@ def get_vak_statistics_by_category():
                 result[specialty] = {"К1": 0, "К2": 0, "К3": 0}
             result[specialty][category] = count
 
-        return jsonify(result)
+        return Response(json.dumps(result, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
