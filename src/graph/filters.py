@@ -9,32 +9,26 @@ filters_bp = Blueprint("graph_filters", __name__, url_prefix="/filters")
 @filters_bp.route("/authors", methods=["GET"])
 def get_authors_filter():
     query = """
-        SELECT value, name
-        FROM (
-            SELECT DISTINCT ON (authorid)
-                authorid AS value,
-                INITCAP(COALESCE(lastname, '') || ' ' || COALESCE(initials, '')) AS name,
-                CASE
-                    WHEN language = 'RU' THEN 0
-                    WHEN language = 'EN' THEN 1
-                    ELSE 2
-                END AS lang_priority,
-                LENGTH(COALESCE(lastname, '') || ' ' || COALESCE(initials, '')) AS name_length
-            FROM authors
-            ORDER BY authorid, lang_priority, name_length DESC
-        ) AS sub
-        {where_clauses}
-    """  # <--- Убрал ORDER BY отсюда
+        WITH matched_authors AS (
+            SELECT DISTINCT value
+            FROM authors_names_with_priority_view
+            {where_clauses}
+        )
+        SELECT DISTINCT ON (auv.value)
+            auv.value,
+            auv.name
+        FROM authors_names_with_priority_view auv
+        JOIN matched_authors ma ON auv.value = ma.value
+        ORDER BY auv.value, auv.lang_priority, auv.name_length DESC
+    """
 
     data = fetch_paginated_options(
         query=query,
         label_column="name",
         value_column="value",
-        order_by_label=True  # По умолчанию — включено
+        order_by_label=False,
     )
     return jsonify(data)
-
-
 
 
 @filters_bp.route("/organizations", methods=["GET"])
