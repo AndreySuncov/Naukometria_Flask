@@ -9,6 +9,10 @@ from flask_cors import CORS
 from src.database.database import get_db_connection
 from src.graph import graph_bp
 
+import pandas as pd
+from io import BytesIO
+from flask import send_file
+
 RESET = "\033[0m"
 COLORS = {
     logging.DEBUG: "\033[90m",  # Grey
@@ -638,6 +642,49 @@ def get_vak_statistics_by_category():
             cur.close()
         if conn:
             conn.close()
+
+
+@app.route('/api/export/author-vak-excel', methods=['GET'])
+def export_author_vak_excel():
+    conn = cur = None
+    try:
+        author_id = request.args.get('authorid')
+        if not author_id or not author_id.isdigit():
+            abort(400, description="authorid is required and must be an integer")
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        query = """
+            SELECT * FROM new_data.author_journal_vak
+            WHERE authorid = %s
+        """
+        cur.execute(query, (int(author_id),))
+        rows = cur.fetchall()
+        columns = [desc[0] for desc in cur.description]
+
+        # Создаем DataFrame
+        df = pd.DataFrame(rows, columns=columns)
+
+        # Создаем Excel в памяти
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='AuthorData')
+
+        output.seek(0)
+
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'author_{author_id}_vak.xlsx'
+        )
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
 
 
 @app.route('/api/references/journals', methods=['GET'])
