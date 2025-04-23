@@ -487,12 +487,13 @@ def get_keywords_statistics():
         conn = get_db_connection()
         cur = conn.cursor()
 
-        # Если год не указан — берем текущий
         year = request.args.get("year")
         if year is not None:
             year = validate_int(year, 1900, 2100, "year")
         else:
             year = datetime.now().year
+
+        limit = validate_int(request.args.get("limit"), 1, 1000000, "limit")
 
         keyword_filter = request.args.get("keyword")
         language_filter = request.args.get("language")
@@ -512,7 +513,11 @@ def get_keywords_statistics():
             query += " AND language = %s"
             params.append(language_filter.upper())
 
-        query += " GROUP BY keyword, language ORDER BY count DESC LIMIT 150"
+        query += " GROUP BY keyword, language ORDER BY count DESC"
+
+        if limit is not None:
+            query += " LIMIT %s"
+            params.append(limit)
 
         cur.execute(query, params)
         results = [
@@ -520,7 +525,7 @@ def get_keywords_statistics():
                 "keyword": row[0],
                 "language": row[1],
                 "count": row[2],
-                "year": year  # добавляем год в каждый объект
+                "year": year
             }
             for row in cur.fetchall()
         ]
