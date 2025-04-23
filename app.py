@@ -940,6 +940,7 @@ def get_top_keywords_by_organization():
         results = [[row[0], row[1]] for row in cur.fetchall()]
 
 
+
         return jsonify(results)  # Возвращаем массив напрямую
 
     except Exception as e:
