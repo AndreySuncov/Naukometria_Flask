@@ -930,7 +930,7 @@ def get_top_keywords_by_organization():
             JOIN affiliations af ON e.organizationid = af.affiliationid
             JOIN authors a ON af.author = a.authorid
             JOIN keywords k ON a.itemid = k.itemid
-            WHERE e.organizationid ILIKE %s
+            WHERE e.organizationid = %s
             GROUP BY k.keyword
             HAVING COUNT(DISTINCT a.itemid) >= %s
             ORDER BY count DESC
