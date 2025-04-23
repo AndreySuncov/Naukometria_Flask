@@ -1,16 +1,13 @@
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
 
+import psycopg2
 from dacite import from_dict
 from flask import Blueprint, abort, jsonify, request
-import psycopg2
-
-from ..utils.graph import tuples_to_graph_links, tuples_to_graph_nodes
-
-from ..entities.datacls import GraphFilter
 
 from ..database.database import DatabaseService
-
+from ..entities.datacls import GraphFilter
+from ..utils.graph import tuples_to_graph_links, tuples_to_graph_nodes
 
 organizations_bp = Blueprint("organizations", __name__, url_prefix="/organizations")
 
@@ -23,7 +20,7 @@ class OrganizationsFilters(GraphFilter):
 def get_filtered_organizations(filters: OrganizationsFilters, cur: psycopg2.extensions.cursor):
     """
     FIXME: В функции две критические проблемы, связанные с корявостью базы:
-    1. Authors и affiliations связаны не однозначно.
+    1. Authors и affiliations не всегда связаны однозначно.
         Получается, что автор писал статью, например, в МГУ,
         а она зачтётся так же и Финашке, и Плешке, и СПБГУ,
         если эти организции числятся у него а аффилиациях

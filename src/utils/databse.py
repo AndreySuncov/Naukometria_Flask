@@ -61,4 +61,11 @@ def fetch_paginated_options(
             return {"items": items, "hasMore": has_more, "total": len(items)}
     except Exception as e:  # pylint: disable=broad-except
         logging.exception(f"Error fetching paginated options: {e}")
-        return {"items": [], "hasMore": False, "total": 0}
+        return {
+            "items": [],
+            "hasMore": False,
+            "total": 0,
+            "error": str(e),
+            "debug_sql": full_query if "full_query" in locals() else "not built",  # type: ignore
+            "debug_params": params if "params" in locals() else "not set",  # type: ignore
+        }

@@ -1,14 +1,13 @@
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
+
+import psycopg2
 from dacite import from_dict
 from flask import Blueprint, abort, jsonify, request
-import psycopg2
-
-from ..utils.graph import tuples_to_graph_links, tuples_to_graph_nodes
-
-from ..entities.datacls import GraphFilter
 
 from ..database.database import DatabaseService
+from ..entities.datacls import GraphFilter
+from ..utils.graph import tuples_to_graph_links, tuples_to_graph_nodes
 
 authors_bp = Blueprint("authors", __name__, url_prefix="/authors")
 
@@ -105,7 +104,11 @@ def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.curso
     cur.execute(query_edges)
     edges = tuples_to_graph_links(cur.fetchall())
 
-    return {"nodes": nodes, "links": edges, "categories": [{"name": "Связанные авторы"}, {"name": "Отфильтрованные авторы"}]}
+    return {
+        "nodes": nodes,
+        "links": edges,
+        "categories": [{"name": "Связанные авторы"}, {"name": "Отфильтрованные авторы"}],
+    }
 
 
 @authors_bp.route("/data", methods=["POST"])
