@@ -1,15 +1,13 @@
-import json
-from dataclasses import dataclass, field
 import logging
-from dacite import from_dict
-from flask import Blueprint, abort, jsonify, request, Response
+from dataclasses import dataclass, field
+
 import psycopg2
-
-from ..utils.graph import tuples_to_graph_links, tuples_to_graph_nodes
-
-from ..entities.datacls import GraphFilter
+from dacite import from_dict
+from flask import Blueprint, abort, jsonify, request
 
 from ..database.database import DatabaseService
+from ..entities.datacls import GraphFilter
+from ..utils.graph import tuples_to_graph_links, tuples_to_graph_nodes
 
 authors_bp = Blueprint("authors", __name__, url_prefix="/authors")
 
@@ -20,12 +18,6 @@ class AuthorsFilters(GraphFilter):
     organizations: list[int] = field(default_factory=list)
     keywords: list[str] = field(default_factory=list)
     cities: list[str] = field(default_factory=list)
-
-
-@dataclass
-class CitationsFilters(GraphFilter):
-    authors: list[int] = field(default_factory=list)  # цитируемые авторы
-    citing_authors: list[int] = field(default_factory=list)  # кто цитирует
 
 
 def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.cursor):
@@ -112,7 +104,11 @@ def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.curso
     cur.execute(query_edges)
     edges = tuples_to_graph_links(cur.fetchall())
 
-    return {"nodes": nodes, "links": edges, "categories": [{"name": "Связанные авторы"}, {"name": "Отфильтрованные авторы"}]}
+    return {
+        "nodes": nodes,
+        "links": edges,
+        "categories": [{"name": "Связанные авторы"}, {"name": "Отфильтрованные авторы"}],
+    }
 
 
 @authors_bp.route("/data", methods=["POST"])
@@ -130,81 +126,3 @@ def get_authors_graph_data():
     except Exception as e:  # pylint: disable=broad-except
         logging.exception(e)
         return jsonify({"error": str(e)}), 500
-
-@authors_bp.route("/citations", methods=["POST"])
-def get_citation_graph():
-    try:
-        filters: CitationsFilters = from_dict(CitationsFilters, request.get_json())
-        logging.debug(f"Received citation filters: {filters}")
-
-        query = """
-                SELECT DISTINCT author_id, \
-                                author_name, \
-                                citing_author, \
-                                citing_author_name, \
-                                author_item_id, \
-                                author_item_title, \
-                                citing, \
-                                citing_item_title
-                FROM new_data.author_citations_view
-                WHERE TRUE \
-                """
-
-        params = []
-        if filters.authors:
-            if len(filters.authors) == 1:
-                filters.authors.append(-1)  # добавляем фиктивный ID, чтобы IN (...) работал
-            query += " AND author_id IN %s"
-            params.append(tuple(filters.authors))
-
-        if filters.citing_authors:
-            if len(filters.citing_authors) == 1:
-                filters.citing_authors.append(-1)
-            query += " AND citing_author IN %s"
-            params.append(tuple(filters.citing_authors))
-
-        with DatabaseService("new_data") as cur:
-            cur.execute(query, params)
-            rows = cur.fetchall()
-
-        authors = {}
-        for row in rows:
-            authors[row[0]] = row[1]
-            authors[row[2]] = row[3]
-
-        nodes = [
-            {"id": str(aid), "name": name}
-            for aid, name in authors.items()
-        ]
-
-        links_raw = [
-            {
-                "source": str(row[2]),
-                "target": str(row[0]),
-                "title": f"{row[7]} → {row[5]}"
-            }
-            for row in rows
-        ]
-
-        # Удаляем дубликаты по source, target, title
-        seen = set()
-        links = []
-        for link in links_raw:
-            key = (link["source"], link["target"], link["title"])
-            if key not in seen:
-                seen.add(key)
-                links.append(link)
-
-        result = {
-            "nodes": nodes,
-            "links": links,
-            "categories": [{"name": "Автор"}]
-        }
-
-        return Response(json.dumps(result, ensure_ascii=False), mimetype="application/json; charset=utf-8")
-
-    except Exception as e:
-        logging.exception(e)
-        return jsonify({"error": str(e)}), 500
-
-
