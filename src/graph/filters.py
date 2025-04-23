@@ -9,10 +9,10 @@ filters_bp = Blueprint("graph_filters", __name__, url_prefix="/filters")
 @filters_bp.route("/authors", methods=["GET"])
 def get_authors_filter():
     query = """
-        SELECT authorid AS value, name
+        SELECT DISTINCT value, name
         FROM (
             SELECT DISTINCT ON (authorid)
-                   authorid,
+                   authorid AS value,
                    INITCAP(COALESCE(lastname, '') || ' ' || COALESCE(initials, '')) AS name,
                    CASE
                        WHEN language = 'RU' THEN 0
@@ -27,6 +27,7 @@ def get_authors_filter():
     """
     data = fetch_paginated_options(query=query, label_column="name", value_column="value")
     return jsonify(data)
+
 
 
 
