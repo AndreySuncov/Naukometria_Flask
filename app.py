@@ -515,7 +515,15 @@ def get_keywords_statistics():
         query += " GROUP BY keyword, language ORDER BY count DESC LIMIT 150"
 
         cur.execute(query, params)
-        results = [{"keyword": row[0], "language": row[1], "count": row[2]} for row in cur.fetchall()]
+        results = [
+            {
+                "keyword": row[0],
+                "language": row[1],
+                "count": row[2],
+                "year": year  # добавляем год в каждый объект
+            }
+            for row in cur.fetchall()
+        ]
 
         return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
@@ -526,7 +534,6 @@ def get_keywords_statistics():
             cur.close()
         if conn:
             conn.close()
-
 
 
 @app.route("/api/keywords/all", methods=["GET"])
