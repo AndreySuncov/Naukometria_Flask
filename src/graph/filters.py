@@ -23,16 +23,17 @@ def get_authors_filter():
             FROM authors
             ORDER BY authorid, lang_priority, name_length DESC
         ) AS sub
-        WHERE value IS NOT NULL AND name ILIKE %s
+        WHERE value IS NOT NULL
         ORDER BY name
     """
     data = fetch_paginated_options(
         query=query,
         label_column="name",
         value_column="value",
-        order_by_label=False  # Мы сами сортируем по name в SQL
+        order_by_label=False
     )
     return jsonify(data)
+
 
 
 
