@@ -576,51 +576,46 @@ def get_vak_statistics_by_category():
     conn = cur = None
     try:
         author_id = request.args.get('authorid')
-        date_from = request.args.get('date_from')
-        date_to = request.args.get('date_to')
+        date_from = request.args.get('date_from')  # формат YYYY-MM-DD
+        date_to = request.args.get('date_to')      # формат YYYY-MM-DD
 
-        # Валидация
         if author_id and not author_id.isdigit():
-            abort(400, description="authorid must be integer")
+            abort(400, description="authorid must be an integer")
 
         conn = get_db_connection()
         cur = conn.cursor()
 
         query = """
             SELECT 
-                v.scientificspecialties,
-                v.category,
-                COUNT(DISTINCT i.itemid) AS count
-            FROM new_data.author_journal_vak vj
-            LEFT JOIN new_data.items i ON vj.itemid = i.itemid
-            LEFT JOIN new_data.journal_vak_data v ON v.issn = vj.issn
-            WHERE 1=1
+                scientificspecialties,
+                category,
+                COUNT(DISTINCT itemid) AS count
+            FROM new_data.author_journal_vak
+            WHERE category IN ('К1', 'К2', 'К3')
         """
         params = []
 
         if author_id:
-            query += " AND vj.authorid = %s"
+            query += " AND authorid = %s"
             params.append(int(author_id))
 
         if date_from:
-            query += " AND v.date_start >= %s"
+            query += " AND date_start >= %s"
             params.append(date_from)
 
         if date_to:
-            query += " AND (v.date_end IS NULL OR v.date_end <= %s)"
+            query += " AND (date_end IS NULL OR date_end <= %s)"
             params.append(date_to)
 
         query += """
-            AND v.category IN ('К1', 'К2', 'К3')
-            GROUP BY v.scientificspecialties, v.category
-            ORDER BY v.scientificspecialties, v.category
+            GROUP BY scientificspecialties, category
+            ORDER BY scientificspecialties, category
         """
 
         cur.execute(query, params)
         data = cur.fetchall()
 
-        # Преобразуем данные в формат:
-        # { "специальность": { "К1": count, "К2": count, "К3": count } }
+        # Преобразуем в { "специальность": { "К1": count, "К2": count, "К3": count } }
         result = {}
         for specialty, category, count in data:
             if specialty not in result:
@@ -632,8 +627,10 @@ def get_vak_statistics_by_category():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
-        if cur: cur.close()
-        if conn: conn.close()
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 
 @app.route("/api/statistics/authors-by-city", methods=["GET"])
