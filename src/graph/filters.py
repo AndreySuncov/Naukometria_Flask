@@ -25,7 +25,7 @@ def get_authors_filter():
         {where_clauses}
         ORDER BY lang_priority, name_length DESC
     """
-    data = fetch_paginated_options(query=query, label_column="name", value_column="value")
+    data = fetch_paginated_options(query=query, label_column="name", value_column="value", order_by_label=False)
     return jsonify(data)
 
 
