@@ -23,17 +23,16 @@ def get_authors_filter():
             FROM authors
             ORDER BY authorid, lang_priority, name_length DESC
         ) AS sub
-        WHERE value IS NOT NULL
+        {where_clauses}  -- вот тут будет ILIKE name, и name уже существует
         ORDER BY name
     """
     data = fetch_paginated_options(
         query=query,
-        label_column="name",
-        value_column="value",
-        order_by_label=False
+        label_column="name",     # фильтрация по name (он есть!)
+        value_column="value",    # value = authorid
+        order_by_label=False     # сортируем вручную
     )
     return jsonify(data)
-
 
 
 
