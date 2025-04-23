@@ -912,9 +912,9 @@ def get_top_keywords_by_organization():
     """Топ ключевых слов по организации"""
     conn = cur = None
     try:
-        organization = request.args.get('organization')
-        if not organization:
-            abort(400, description="Parameter 'organization' is required")
+        organizationid = request.args.get('organizationid')
+        if not organizationid:
+            abort(400, description="Parameter 'organizationid' is required")
 
         min_count = validate_int(request.args.get("min_count"), 1, 10**6, "min_count") or 10
         limit = validate_int(request.args.get("limit"), 1, 100, "limit") or 10
@@ -930,16 +930,17 @@ def get_top_keywords_by_organization():
             JOIN affiliations af ON e.organizationid = af.affiliationid
             JOIN authors a ON af.author = a.authorid
             JOIN keywords k ON a.itemid = k.itemid
-            WHERE e.organizationname ILIKE %s
+            WHERE e.organizationid = %s
             GROUP BY k.keyword
             HAVING COUNT(DISTINCT a.itemid) >= %s
             ORDER BY count DESC
             LIMIT %s
         """
-        cur.execute(query, (f"%{organization}%", min_count, limit))
+        cur.execute(query, (int(organizationid), min_count, limit))
         results = [[row[0], row[1]] for row in cur.fetchall()]
 
-        return jsonify(results)  # Возвращаем массив напрямую
+        return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
+
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
