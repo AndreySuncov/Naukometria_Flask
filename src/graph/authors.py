@@ -177,7 +177,7 @@ def get_citation_graph():
             for aid, name in authors.items()
         ]
 
-        links = [
+        links_raw = [
             {
                 "source": str(row[2]),
                 "target": str(row[0]),
@@ -185,6 +185,15 @@ def get_citation_graph():
             }
             for row in rows
         ]
+
+        # Удаляем дубликаты по source, target, title
+        seen = set()
+        links = []
+        for link in links_raw:
+            key = (link["source"], link["target"], link["title"])
+            if key not in seen:
+                seen.add(key)
+                links.append(link)
 
         result = {
             "nodes": nodes,
