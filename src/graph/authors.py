@@ -152,9 +152,14 @@ def get_citation_graph():
 
         params = []
         if filters.authors:
+            if len(filters.authors) == 1:
+                filters.authors.append(-1)  # добавляем фиктивный ID, чтобы IN (...) работал
             query += " AND author_id IN %s"
             params.append(tuple(filters.authors))
+
         if filters.citing_authors:
+            if len(filters.citing_authors) == 1:
+                filters.citing_authors.append(-1)
             query += " AND citing_author IN %s"
             params.append(tuple(filters.citing_authors))
 
