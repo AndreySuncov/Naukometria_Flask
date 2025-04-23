@@ -648,6 +648,148 @@ def get_keywords():
         if conn:
             conn.close()
 
+@app.route('/api/statistics/rating/organizations', methods=['GET'])
+def get_popular_organizations():
+    """Получение списка организаций для выпадающего списка с фильтром по минимальному количеству публикаций"""
+    conn = cur = None
+    try:
+        min_publications = validate_int(request.args.get("min_publications"), 1, 10**6, "min_publications")
+        if min_publications is None:
+            min_publications = 200
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        query = """
+            SELECT DISTINCT e.organizationname
+            FROM elibrary_organizations e
+            JOIN affiliations af ON e.organizationid = af.affiliationid
+            JOIN authors a ON af.author = a.authorid
+            GROUP BY e.organizationname
+            HAVING COUNT(DISTINCT a.itemid) >= %s
+            ORDER BY e.organizationname
+        """
+        cur.execute(query, (min_publications,))
+        results = [row[0] for row in cur.fetchall()]
+
+        return jsonify(results)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+@app.route('/api/statistics/rating/keywords', methods=['GET'])
+def get_popular_keywords():
+    """Получение списка ключевых слов для выпадающего списка с фильтром по минимальному количеству публикаций"""
+    conn = cur = None
+    try:
+        min_publications = validate_int(request.args.get("min_publications"), 1, 10**6, "min_publications")
+        if min_publications is None:
+            min_publications = 100  
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        query = """
+            SELECT keyword
+            FROM keywords
+            WHERE keyword IS NOT NULL
+            GROUP BY keyword
+            HAVING COUNT(DISTINCT itemid) >= %s
+            ORDER BY keyword
+        """
+        cur.execute(query, (min_publications,))
+        results = [row[0] for row in cur.fetchall()]
+
+        return jsonify(results)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+@app.route('/api/statistics/rating/organizations-by-keyword', methods=['GET'])
+def get_top_organizations_by_keyword():
+    """Топ организаций по ключевому слову"""
+    conn = cur = None
+    try:
+        keyword = request.args.get('keyword')
+        if not keyword:
+            abort(400, description="Parameter 'keyword' is required")
+
+        min_count = validate_int(request.args.get("min_count"), 1, 10**6, "min_count") or 10
+        limit = validate_int(request.args.get("limit"), 1, 100, "limit") or 10
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        query = """
+            SELECT 
+                e.organizationname AS organization,
+                COUNT(DISTINCT k.itemid) AS count
+            FROM keywords k
+            JOIN authors a ON k.itemid = a.itemid
+            JOIN affiliations af ON a.authorid = af.author
+            JOIN elibrary_organizations e ON af.affiliationid = e.organizationid
+            WHERE k.keyword ILIKE %s
+            GROUP BY e.organizationname
+            HAVING COUNT(DISTINCT k.itemid) >= %s
+            ORDER BY count DESC
+            LIMIT %s
+        """
+        cur.execute(query, (f"%{keyword}%", min_count, limit))
+        results = [[row[0], row[1]] for row in cur.fetchall()]
+
+        return jsonify(results)  # Возвращаем массив напрямую
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+        
+@app.route('/api/statistics/rating/keywords-by-organization', methods=['GET'])
+def get_top_keywords_by_organization():
+    """Топ ключевых слов по организации"""
+    conn = cur = None
+    try:
+        organization = request.args.get('organization')
+        if not organization:
+            abort(400, description="Parameter 'organization' is required")
+
+        min_count = validate_int(request.args.get("min_count"), 1, 10**6, "min_count") or 10
+        limit = validate_int(request.args.get("limit"), 1, 100, "limit") or 10
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        query = """
+            SELECT 
+                k.keyword,
+                COUNT(DISTINCT a.itemid) AS count
+            FROM elibrary_organizations e
+            JOIN affiliations af ON e.organizationid = af.affiliationid
+            JOIN authors a ON af.author = a.authorid
+            JOIN keywords k ON a.itemid = k.itemid
+            WHERE e.organizationname ILIKE %s
+            GROUP BY k.keyword
+            HAVING COUNT(DISTINCT a.itemid) >= %s
+            ORDER BY count DESC
+            LIMIT %s
+        """
+        cur.execute(query, (f"%{organization}%", min_count, limit))
+        results = [[row[0], row[1]] for row in cur.fetchall()]
+
+        return jsonify(results)  # Возвращаем массив напрямую
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
 
 app.register_blueprint(graph_bp)
 
