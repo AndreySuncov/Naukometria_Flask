@@ -138,29 +138,24 @@ def get_citation_graph():
         logging.debug(f"Received citation filters: {filters}")
 
         query = """
-            SELECT DISTINCT
-                a.authorid,
-                c.lastname || ' ' || c.initials AS author_name,
-                b.authorid AS citing_author,
-                b.lastname || ' ' || b.initials AS citing_author_name,
-                a.author_item_id,
-                d.title AS author_item_title,
-                a.citing,
-                e.title AS citing_item_title
-            FROM new_data.author_citations_view a
-            JOIN new_data.authors b ON b.itemid = a.citing
-            JOIN new_data.authors c ON c.itemid = a.author_item_id
-            JOIN new_data.items d ON d.itemid = a.author_item_id
-            JOIN new_data.items e ON e.itemid = a.citing
-            WHERE TRUE
-        """
+                SELECT DISTINCT author_id, \
+                                author_name, \
+                                citing_author, \
+                                citing_author_name, \
+                                author_item_id, \
+                                author_item_title, \
+                                citing, \
+                                citing_item_title
+                FROM new_data.author_citations_view
+                WHERE TRUE \
+                """
 
         params = []
         if filters.authors:
-            query += " AND c.authorid IN %s"
+            query += " AND authorid IN %s"
             params.append(tuple(filters.authors))
         if filters.citing_authors:
-            query += " AND b.authorid IN %s"
+            query += " AND citing_author IN %s"
             params.append(tuple(filters.citing_authors))
 
         with DatabaseService("new_data") as cur:
