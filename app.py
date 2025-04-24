@@ -517,17 +517,13 @@ def get_author_distribution_by_city():
         cur = conn.cursor()
 
         query = """
-            SELECT 
-                a.town AS city,
-                COUNT(DISTINCT au.authorid) AS authors_count
-            FROM affiliations a
-            JOIN authors au ON a.author = au.authorid
-            WHERE a.town IS NOT NULL
-            GROUP BY a.town
-            HAVING COUNT(DISTINCT au.itemid) >= %s
-        """
+                SELECT normalized_city, authors_count
+                FROM authors_by_city_mv
+                WHERE publications_count >= %s
+                ORDER BY authors_count DESC
+                """
         cur.execute(query, (min_publications,))
-        
+
         # Нормализуем названия городов и объединяем данные
         city_stats = {}
         for city, count in cur.fetchall():
@@ -994,18 +990,12 @@ def get_top_keywords_by_organization():
         cur = conn.cursor()
 
         query = """
-            SELECT 
-                k.keyword,
-                COUNT(DISTINCT a.itemid) AS count
-            FROM elibrary_organizations e
-            JOIN affiliations af ON e.organizationid = af.affiliationid
-            JOIN authors a ON af.author = a.authorid
-            JOIN keywords k ON a.itemid = k.itemid
-            WHERE e.organizationname ILIKE %s
-            GROUP BY k.keyword
-            HAVING COUNT(DISTINCT a.itemid) >= %s
+            SELECT keyword, count
+            FROM new_data.keywords_by_organization_mv
+            WHERE organizationname ILIKE %s
+              AND count >= %s
             ORDER BY count DESC
-            LIMIT %s
+            LIMIT %s;
         """
         cur.execute(query, (f"%{organization}%", min_count, limit))
         results = [[row[0], row[1]] for row in cur.fetchall()]
