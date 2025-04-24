@@ -80,13 +80,13 @@ def get_references(ref_type):
         cur = conn.cursor()
 
         query_map = {
-            "typecode": "SELECT DISTINCT typecode FROM items WHERE typecode IS NOT NULL",
-            "genreid": "SELECT DISTINCT genreid FROM items WHERE genreid IS NOT NULL",
-            "language": "SELECT DISTINCT language FROM authors UNION SELECT DISTINCT language FROM items",
-            "status": "SELECT DISTINCT status FROM authors WHERE status IS NOT NULL",
-            "countries": "SELECT DISTINCT country FROM affiliations WHERE country IS NOT NULL",
-            "towns": "SELECT DISTINCT town FROM affiliations WHERE town IS NOT NULL",
-            "organization_countries": "SELECT DISTINCT countryid FROM elibrary_organizations",
+            "typecode": "SELECT typecode FROM new_data.ref_typecode_mv",
+            "genreid": "SELECT genreid FROM new_data.ref_genreid_mv",
+            "language": "SELECT language FROM new_data.ref_language_mv",
+            "status": "SELECT status FROM new_data.ref_status_mv",
+            "countries": "SELECT country FROM new_data.ref_affiliation_countries_mv",
+            "towns": "SELECT town FROM new_data.ref_towns_mv",
+            "organization_countries": "SELECT countryid FROM new_data.ref_org_countries_mv",
         }
 
         cur.execute(query_map[ref_type])
@@ -451,58 +451,41 @@ def get_authors_by_city():
     if not city:
         abort(400, description="Parameter 'city' is required")
 
-    city = city.strip()
+    city = city.strip().lower()
     if not city:
         abort(400, description="City name cannot be empty")
-    
+
     limit = validate_int(request.args.get("limit"), 1, 1000, "limit")
     if limit is None:
         limit = 10
 
-    conn = None
-    cur = None
+    conn = cur = None
     try:
         conn = get_db_connection()
         cur = conn.cursor()
 
         query = """
-            WITH author_stats AS (
-                SELECT 
-                    a.authorid,
-                    MAX(a.lastname) AS lastname,
-                    MAX(a.initials) AS initials,
-                    COUNT(DISTINCT a.itemid) AS publication_count
-                FROM authors a
-                JOIN affiliations af ON a.authorid = af.author
-                WHERE af.town ILIKE %s
-                GROUP BY a.authorid
-            )
             SELECT 
                 INITCAP(lastname || ' ' || initials) AS name,
                 publication_count
-            FROM author_stats
+            FROM new_data.authors_by_city_full_mv
+            WHERE normalized_city = %s
             ORDER BY publication_count DESC
             LIMIT %s
         """
-        cur.execute(query, (f"%{city}%", limit))
-        
-        authors = []
-        for name, pub_count in cur.fetchall():
-            authors.append({
-                "name": name,
-                "publications": pub_count
-            })
-
-        return jsonify(authors)
+        cur.execute(query, (city, limit))
+        data = [
+            {"name": row[0], "publications": row[1]}
+            for row in cur.fetchall()
+        ]
+        return jsonify(data)
 
     except Exception as e:
         app.logger.error(f"Error in /api/authors/by-city: {str(e)}")
         abort(500, description="Internal server error")
     finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
+        if cur: cur.close()
+        if conn: conn.close()
 
 
 @app.route("/api/statistics/authors-by-city", methods=["GET"])
@@ -548,6 +531,60 @@ def get_author_distribution_by_city():
             conn.close()
 
 
+@app.route("/api/map/city-publications", methods=["GET"])
+def get_city_publications_map():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Получаем нормализованные данные по публикациям
+        cur.execute("""
+            SELECT original_city, publication_count
+            FROM new_data.city_publications_mv
+        """)
+        rows = cur.fetchall()
+
+        # Преобразуем к словарю: нормализованное_имя -> публикации
+        city_stats = {}
+        for raw_city, count in rows:
+            norm_city = normalize_city_name(raw_city)
+            if norm_city in city_stats:
+                city_stats[norm_city] += count
+            else:
+                city_stats[norm_city] = count
+
+        # Получаем координаты из coordinate_data
+        cur.execute("""
+            SELECT 
+                settlement AS city,
+                "latitude(dd)" AS lat,
+                "longitude(dd)" AS lon
+            FROM coordinate_data
+            WHERE "latitude(dd)" IS NOT NULL AND "longitude(dd)" IS NOT NULL
+        """)
+        coords = {row[0].strip(): (row[1], row[2]) for row in cur.fetchall()}
+
+        # Собираем финальную структуру
+        result = []
+        for city_ru, count in city_stats.items():
+            coord = coords.get(city_ru)
+            if coord:
+                result.append({
+                    "city": city_ru,
+                    "publications": count,
+                    "lat": coord[0],
+                    "lon": coord[1]
+                })
+
+        return Response(json.dumps(result, ensure_ascii=False), mimetype="application/json; charset=utf-8")
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if 'cur' in locals(): cur.close()
+        if 'conn' in locals(): conn.close()
+
+
 @app.route("/api/statistics/publications-by-year", methods=["GET"])
 def get_publications_by_year():
     conn = cur = None
@@ -567,10 +604,9 @@ def get_publications_by_year():
         cur = conn.cursor()
 
         query = """
-            SELECT year, COUNT(*) as publications_count 
-            FROM items 
+            SELECT year, publications_count
+            FROM new_data.publications_by_year_mv
             WHERE year BETWEEN %s AND %s
-            GROUP BY year 
             ORDER BY year
         """
         cur.execute(query, (year_from, year_to))
@@ -608,9 +644,9 @@ def get_keywords_statistics():
         language_filter = request.args.get("language")
 
         query = """
-            SELECT keyword, language, COUNT(*) AS count
-            FROM keyword_year_view
-            WHERE year = %s
+            SELECT keyword, language, count
+            FROM new_data.keyword_year_stats_mv
+            WHERE year = %s ...
         """
         params = [year]
 
@@ -658,12 +694,8 @@ def get_all_keywords():
         cur = conn.cursor()
 
         query = """
-            SELECT 
-                keyword, 
-                COUNT(DISTINCT itemid) AS articles_count 
-            FROM keywords 
-            WHERE keyword IS NOT NULL 
-            GROUP BY keyword 
+            SELECT keyword, articles_count
+            FROM new_data.all_keywords_mv
             ORDER BY keyword
         """
         cur.execute(query)
@@ -699,13 +731,13 @@ def get_vak_statistics_by_category():
         cur = conn.cursor()
 
         query = """
-            SELECT 
-                scientificspecialties,
-                category,
-                COUNT(DISTINCT itemid) AS count
-            FROM new_data.author_journal_vak
-            WHERE category IN ('К1', 'К2', 'К3')
-        """
+                SELECT scientificspecialties,
+                       category,
+                       COUNT(DISTINCT itemid) AS count
+                FROM new_data.vak_statistics_mv
+                WHERE 1=1
+                """
+
         params = []
 
         if author_id:
@@ -800,9 +832,8 @@ def get_journals_reference():
         cur = conn.cursor()
 
         query = """
-            SELECT DISTINCT issn, journal_name
-            FROM new_data.author_journal_vak
-            WHERE issn IS NOT NULL AND journal_name IS NOT NULL
+            SELECT issn, journal_name
+            FROM new_data.journals_reference_mv
             ORDER BY journal_name
         """
 
@@ -873,7 +904,7 @@ def get_keywords():
 
 @app.route('/api/statistics/rating/organizations', methods=['GET'])
 def get_popular_organizations():
-    """Получение списка организаций для выпадающего списка с фильтром по минимальному количеству публикаций"""
+    """Получение списка организаций из materialized view"""
     conn = cur = None
     try:
         min_publications = validate_int(request.args.get("min_publications"), 1, 10**6, "min_publications")
@@ -884,13 +915,10 @@ def get_popular_organizations():
         cur = conn.cursor()
 
         query = """
-            SELECT DISTINCT e.organizationname
-            FROM elibrary_organizations e
-            JOIN affiliations af ON e.organizationid = af.affiliationid
-            JOIN authors a ON af.author = a.authorid
-            GROUP BY e.organizationname
-            HAVING COUNT(DISTINCT a.itemid) >= %s
-            ORDER BY e.organizationname
+            SELECT organization
+            FROM popular_organizations_mv
+            WHERE publications_count >= %s
+            ORDER BY organization
         """
         cur.execute(query, (min_publications,))
         results = [row[0] for row in cur.fetchall()]
@@ -903,24 +931,23 @@ def get_popular_organizations():
         if cur: cur.close()
         if conn: conn.close()
 
+
 @app.route('/api/statistics/rating/keywords', methods=['GET'])
 def get_popular_keywords():
-    """Получение списка ключевых слов для выпадающего списка с фильтром по минимальному количеству публикаций"""
+    """Получение списка ключевых слов из materialized view"""
     conn = cur = None
     try:
         min_publications = validate_int(request.args.get("min_publications"), 1, 10**6, "min_publications")
         if min_publications is None:
-            min_publications = 100  
+            min_publications = 100
 
         conn = get_db_connection()
         cur = conn.cursor()
 
         query = """
             SELECT keyword
-            FROM keywords
-            WHERE keyword IS NOT NULL
-            GROUP BY keyword
-            HAVING COUNT(DISTINCT itemid) >= %s
+            FROM popular_keywords_mv
+            WHERE publications_count >= %s
             ORDER BY keyword
         """
         cur.execute(query, (min_publications,))
@@ -933,6 +960,7 @@ def get_popular_keywords():
     finally:
         if cur: cur.close()
         if conn: conn.close()
+
 
 @app.route('/api/statistics/rating/organizations-by-keyword', methods=['GET'])
 def get_top_organizations_by_keyword():
