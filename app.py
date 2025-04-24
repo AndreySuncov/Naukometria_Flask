@@ -647,7 +647,7 @@ def get_city_organizations():
             reverse=True
         )
 
-        return jsonify(sorted_orgs[:limit])
+        return Response(json.dumps(sorted_orgs[:limit], ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
