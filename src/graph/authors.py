@@ -40,6 +40,7 @@ def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.curso
         WITH related_authors_ids AS (SELECT a.authorid
                                     FROM authors a
                                             JOIN filtered_authors fa ON a.itemid = fa.itemid
+                                    WHERE a.authorid != fa.authorid
                                     GROUP BY a.authorid, fa.authorid
                                     HAVING COUNT(DISTINCT a.itemid) >= %s)
         SELECT DISTINCT ON (a.authorid, a.itemid) a.authorid               as authorid,
@@ -51,7 +52,7 @@ def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.curso
         FROM authors a
                 JOIN related_authors_ids rela ON a.authorid = rela.authorid
                 JOIN filtered_authors fa ON a.itemid = fa.itemid
-        WHERE a.authorid != fa.authorid;
+        WHERE a.authorid NOT IN (SELECT authorid FROM filtered_authors);
     """
     where_clauses = ["authorid IS NOT NULL"]
     params = []
