@@ -533,38 +533,51 @@ def get_author_distribution_by_city():
 
 @app.route("/api/map/city-publications", methods=["GET"])
 def get_city_publications_map():
+    keyword_filter = request.args.get("keyword")
+
     try:
         conn = get_db_connection()
         cur = conn.cursor()
 
-        # Получаем нормализованные данные по публикациям
+        # Получаем itemid → keyword (если фильтр передан)
+        filtered_itemids = set()
+        if keyword_filter:
+            cur.execute("""
+                SELECT DISTINCT itemid
+                FROM new_data.keywords
+                WHERE keyword ILIKE %s
+            """, (f"%{keyword_filter}%",))
+            filtered_itemids = {row[0] for row in cur.fetchall()}
+            if not filtered_itemids:
+                return jsonify([])  # нет таких публикаций с этим ключевым словом
+
+        # Получаем город → itemid
         cur.execute("""
-            SELECT original_city, publication_count
+            SELECT original_city, itemid
             FROM new_data.city_publications_mv
         """)
-        rows = cur.fetchall()
+        city_to_items = {}
+        for city, itemid in cur.fetchall():
+            if not keyword_filter or itemid in filtered_itemids:
+                city_to_items.setdefault(city, set()).add(itemid)
 
-        # Преобразуем к словарю: нормализованное_имя -> публикации
+        # Нормализуем названия городов и считаем публикации
         city_stats = {}
-        for raw_city, count in rows:
+        for raw_city, items in city_to_items.items():
             norm_city = normalize_city_name(raw_city)
-            if norm_city in city_stats:
-                city_stats[norm_city] += count
-            else:
-                city_stats[norm_city] = count
+            city_stats[norm_city] = city_stats.get(norm_city, 0) + len(items)
 
-        # Получаем координаты из coordinate_data
+        # Получаем координаты
         cur.execute("""
-            SELECT 
-                settlement AS city,
-                "latitude(dd)" AS lat,
-                "longitude(dd)" AS lon
+            SELECT settlement AS city, 
+                   "latitude(dd)" AS lat, 
+                   "longitude(dd)" AS lon
             FROM coordinate_data
             WHERE "latitude(dd)" IS NOT NULL AND "longitude(dd)" IS NOT NULL
         """)
         coords = {row[0].strip(): (row[1], row[2]) for row in cur.fetchall()}
 
-        # Собираем финальную структуру
+        # Сборка результата
         result = []
         for city_ru, count in city_stats.items():
             coord = coords.get(city_ru)
@@ -583,6 +596,7 @@ def get_city_publications_map():
     finally:
         if 'cur' in locals(): cur.close()
         if 'conn' in locals(): conn.close()
+
 
 
 @app.route("/api/statistics/publications-by-year", methods=["GET"])
