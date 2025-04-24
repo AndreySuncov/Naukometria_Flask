@@ -388,10 +388,65 @@ def get_organizations():
         if conn:
             conn.close()
 
+# Для распределения по городам
+CITY_MAPPING = {
+    'moscow': 'Москва',
+    'moskva': 'Москва',
+    'saint petersburg': 'Санкт-Петербург',
+    'saint-petersburg': 'Санкт-Петербург',
+    'st petersburg': 'Санкт-Петербург',
+    'st. petersburg': 'Санкт-Петербург',
+    'spb': 'Санкт-Петербург',
+    'krasnodar': 'Краснодар', 
+    'novosibirsk': 'Новосибирск',
+    'yekaterinburg': 'Екатеринбург',
+    'ekaterinburg': 'Екатеринбург',
+    'kazan': 'Казань',
+    'nizhny novgorod': 'Нижний Новгород',
+    'nizhniy novgorod': 'Нижний Новгород',
+    'chelyabinsk': 'Челябинск',
+    'samara': 'Самара',
+    'omsk': 'Омск',
+    'rostov-on-don': 'Ростов-на-Дону',
+    'rostov on don': 'Ростов-на-Дону',
+    'ufa': 'Уфа',
+    'krasnoyarsk': 'Красноярск',
+    'perm': 'Пермь',
+    'voronezh': 'Воронеж',
+    'volgograd': 'Волгоград',
+    'vladimir': 'Владимир',
+    'mytishi': 'Мытищи',
+    'vladikavkaz': 'Владикавказ',
+    'lipetsk': 'Липецк',
+    'kursk': 'Курск',
+    'yaroslavl': 'Ярославль',
+    'smolensk': 'Смоленск',
+    'tula': 'Тула',
+    'kaluga': 'Калуга',
+    'orel': 'Орел'
+    
+}
+
+def normalize_city_name(city_name):
+    if not city_name:
+        return city_name
+    
+    lower_name = city_name.strip().lower()
+    
+    # Проверяем полные совпадения
+    if lower_name in CITY_MAPPING:
+        return CITY_MAPPING[lower_name]
+    
+    # Проверяем частичные совпадения
+    for eng_name, ru_name in CITY_MAPPING.items():
+        if eng_name in lower_name:
+            return ru_name
+    
+    # Если не нашли соответствия, возвращаем оригинал с капитализацией
+    return city_name.strip().title()
 
 @app.route("/api/authors/by-city", methods=["GET"])
 def get_authors_by_city():
-    # Валидация параметра ДО подключения к БД
     city = request.args.get("city")
     if not city:
         abort(400, description="Parameter 'city' is required")
@@ -399,6 +454,10 @@ def get_authors_by_city():
     city = city.strip()
     if not city:
         abort(400, description="City name cannot be empty")
+    
+    limit = validate_int(request.args.get("limit"), 1, 1000, "limit")
+    if limit is None:
+        limit = 10
 
     conn = None
     cur = None
@@ -407,35 +466,85 @@ def get_authors_by_city():
         cur = conn.cursor()
 
         query = """
+            WITH author_stats AS (
+                SELECT 
+                    a.authorid,
+                    MAX(a.lastname) AS lastname,
+                    MAX(a.initials) AS initials,
+                    COUNT(DISTINCT a.itemid) AS publication_count
+                FROM authors a
+                JOIN affiliations af ON a.authorid = af.author
+                WHERE af.town ILIKE %s
+                GROUP BY a.authorid
+            )
             SELECT 
-                a.lastname, 
-                a.initials 
-            FROM authors a
-            JOIN affiliations af ON a.authorid = af.author
-            WHERE af.town ILIKE %s
+                INITCAP(lastname || ' ' || initials) AS name,
+                publication_count
+            FROM author_stats
+            ORDER BY publication_count DESC
+            LIMIT %s
         """
-        cur.execute(query, (f"%{city}%",))
+        cur.execute(query, (f"%{city}%", limit))
+        
+        authors = []
+        for name, pub_count in cur.fetchall():
+            authors.append({
+                "name": name,
+                "publications": pub_count
+            })
 
-        unique_names = set()
-        for lastname, initials in cur.fetchall():
-            normalized_lastname = lastname.strip().lower() if lastname else ""
-            normalized_initials = initials.strip().lower() if initials else ""
-
-            if normalized_initials:
-                normalized_initials = normalized_initials.replace(".", "").replace("-", "")
-
-            name_key = f"{normalized_lastname} {normalized_initials}".strip()
-
-            if name_key:
-                unique_names.add(name_key.title())
-
-        sorted_authors = sorted(unique_names)
-
-        return Response(json.dumps(sorted_authors, ensure_ascii=False), mimetype="application/json; charset=utf-8")
+        return jsonify(authors)
 
     except Exception as e:
         app.logger.error(f"Error in /api/authors/by-city: {str(e)}")
         abort(500, description="Internal server error")
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.route("/api/statistics/authors-by-city", methods=["GET"])
+def get_author_distribution_by_city():
+    conn = cur = None
+    try:
+        min_publications = validate_int(request.args.get("min_publications"), 1, 10**6, "min_publications")
+        if min_publications is None:
+            min_publications = 10
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        query = """
+            SELECT 
+                a.town AS city,
+                COUNT(DISTINCT au.authorid) AS authors_count
+            FROM affiliations a
+            JOIN authors au ON a.author = au.authorid
+            WHERE a.town IS NOT NULL
+            GROUP BY a.town
+            HAVING COUNT(DISTINCT au.itemid) >= %s
+        """
+        cur.execute(query, (min_publications,))
+        
+        # Нормализуем названия городов и объединяем данные
+        city_stats = {}
+        for city, count in cur.fetchall():
+            normalized_city = normalize_city_name(city)
+            if normalized_city in city_stats:
+                city_stats[normalized_city] += count
+            else:
+                city_stats[normalized_city] = count
+
+        # Преобразуем в список и сортируем
+        data = [[city, count] for city, count in city_stats.items()]
+        data.sort(key=lambda x: x[1], reverse=True)
+
+        return Response(json.dumps(data, ensure_ascii=False), mimetype="application/json; charset=utf-8")
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     finally:
         if cur:
             cur.close()
@@ -705,44 +814,6 @@ def get_journals_reference():
         results = [{"issn": row[0], "name": row[1]} for row in cur.fetchall()]
 
         return jsonify(results)
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
-
-
-@app.route("/api/statistics/authors-by-city", methods=["GET"])
-def get_author_distribution_by_city():
-    conn = cur = None
-    try:
-        min_publications = validate_int(request.args.get("min_publications"), 1, 10**6, "min_publications")
-        if min_publications is None:
-            min_publications = 10
-
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        query = """
-            SELECT 
-                a.town AS city,
-                COUNT(DISTINCT au.itemid) AS publications_count
-            FROM affiliations a
-            JOIN authors au ON a.author = au.authorid
-            WHERE a.town IS NOT NULL
-            GROUP BY a.town
-            HAVING COUNT(DISTINCT au.itemid) >= %s
-            ORDER BY publications_count DESC
-        """
-        cur.execute(query, (min_publications,))
-        results = cur.fetchall()
-
-        data = [[row[0], row[1]] for row in results]
-
-        return Response(json.dumps(data, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
