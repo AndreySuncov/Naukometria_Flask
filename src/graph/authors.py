@@ -18,12 +18,14 @@ class AuthorsFilters(GraphFilter):
     organizations: list[int] = field(default_factory=list)
     keywords: list[str] = field(default_factory=list)
     cities: list[str] = field(default_factory=list)
+    min_publications: str = "3"
 
 
 def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.cursor):
+    min_publications = int(filters.min_publications)
     query_temp_table = """
         CREATE TEMP TABLE filtered_authors AS
-        SELECT authorid,
+        SELECT DISTINCT authorid,
             lastname || ' ' ||
             (SELECT string_agg(LEFT(TRIM(word), 1) || '.', '')
                 FROM unnest(string_to_array(regexp_replace(initials, '[.]', ' ', 'g'), ' ')) AS word
@@ -35,14 +37,21 @@ def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.curso
         {where_clause};
         
         CREATE TEMP TABLE related_authors AS
-        SELECT DISTINCT a.authorid,
-            lastname || ' ' ||
-            (SELECT string_agg(LEFT(TRIM(word), 1) || '.', '')
-                FROM unnest(string_to_array(regexp_replace(a.initials, '[.]', ' ', 'g'), ' ')) AS word
-                WHERE TRIM(word) <> '') AS name,
-            a.itemid
+        WITH related_authors_ids AS (SELECT a.authorid
+                                    FROM authors a
+                                            JOIN filtered_authors fa ON a.itemid = fa.itemid
+                                    WHERE a.authorid != fa.authorid
+                                    GROUP BY a.authorid, fa.authorid
+                                    HAVING COUNT(DISTINCT a.itemid) >= %s)
+        SELECT DISTINCT ON (a.authorid, a.itemid) a.authorid               as authorid,
+                                                lastname || ' ' ||
+                                                (SELECT string_agg(LEFT(TRIM(word), 1) || '.', '')
+                                                FROM unnest(string_to_array(regexp_replace(a.initials, '[.]', ' ', 'g'), ' ')) AS word
+                                                WHERE TRIM(word) <> '') AS name,
+                                                a.itemid                 as itemid
         FROM authors a
-        JOIN filtered_authors fa ON a.itemid = fa.itemid
+                JOIN related_authors_ids rela ON a.authorid = rela.authorid
+                JOIN filtered_authors fa ON a.itemid = fa.itemid
         WHERE a.authorid NOT IN (SELECT authorid FROM filtered_authors);
     """
     where_clauses = ["authorid IS NOT NULL"]
@@ -59,6 +68,8 @@ def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.curso
     if filters.cities:
         where_clauses.append("aff.town IN %s")
         params.append(tuple(filters.cities))
+
+    params.append(min_publications)
 
     if where_clauses:
         where_clause = "WHERE " + " AND ".join(where_clauses)
@@ -99,9 +110,10 @@ def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.curso
             SELECT * FROM related_authors
         ) a2 ON a1.itemid = a2.itemid
         WHERE a1.authorid < a2.authorid
-        GROUP BY a1.authorid, a2.authorid;
+        GROUP BY a1.authorid, a2.authorid
+        HAVING COUNT(DISTINCT a1.itemid) >= %s;
     """
-    cur.execute(query_edges)
+    cur.execute(query_edges, (min_publications,))
     edges = tuples_to_graph_links(cur.fetchall())
 
     return {
