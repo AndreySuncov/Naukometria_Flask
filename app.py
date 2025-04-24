@@ -598,6 +598,63 @@ def get_city_publications_map():
         if 'conn' in locals(): conn.close()
 
 
+@app.route("/api/map/city-organizations", methods=["GET"])
+def get_city_organizations():
+    city = request.args.get("city")
+    if not city or not city.strip():
+        abort(400, description="Parameter 'city' is required")
+
+    keyword = request.args.get("keyword")
+    limit = validate_int(request.args.get("limit"), 1, 1000, "limit")
+    if limit is None:
+        limit = 10
+
+    city = city.strip().lower()
+
+    conn = cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Если есть фильтр по ключевому слову — получаем itemid
+        filtered_itemids = set()
+        if keyword:
+            cur.execute("""
+                SELECT DISTINCT itemid
+                FROM new_data.keywords
+                WHERE keyword ILIKE %s
+            """, (f"%{keyword}%",))
+            filtered_itemids = {row[0] for row in cur.fetchall()}
+            if not filtered_itemids:
+                return jsonify([])
+
+        # Основной запрос
+        cur.execute("""
+            SELECT organizationname, itemid
+            FROM new_data.city_organization_items_mv
+            WHERE normalized_city = %s
+        """, (city,))
+
+        org_to_items = {}
+        for org, itemid in cur.fetchall():
+            if not keyword or itemid in filtered_itemids:
+                org_to_items.setdefault(org, set()).add(itemid)
+
+        # Считаем и сортируем
+        sorted_orgs = sorted(
+            [{"organization": org, "publications": len(itemids)} for org, itemids in org_to_items.items()],
+            key=lambda x: x["publications"],
+            reverse=True
+        )
+
+        return jsonify(sorted_orgs[:limit])
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
 
 @app.route("/api/statistics/publications-by-year", methods=["GET"])
 def get_publications_by_year():
