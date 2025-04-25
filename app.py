@@ -504,7 +504,7 @@ def get_author_distribution_by_city():
         query = """
                 SELECT normalized_city, authors_count
                 FROM authors_by_city_mv
-                WHERE authors_count >= %s
+                WHERE publications_count >= %s
                 ORDER BY authors_count DESC
                 """
         cur.execute(query, (min_publications,))
@@ -993,7 +993,7 @@ def get_top_organizations_by_keyword():
 
         query = """
             SELECT
-                
+                organizationid AS organization,
                 organizationname AS name,
                 COUNT(DISTINCT itemid) AS count
             FROM organization_keyword_items_mv
