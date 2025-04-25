@@ -19,22 +19,18 @@ class ReferencesFilters(GraphFilter):
 
 def get_filtered_references(filters: ReferencesFilters):
     query = """
-            SELECT DISTINCT author_id, \
-                            author_name, \
-                            citing_author, \
-                            citing_author_name, \
-                            author_item_id, \
-                            author_item_title, \
-                            citing, \
-                            citing_item_title
-            FROM new_data.author_citations_view
-            WHERE TRUE \
-            """
+        SELECT author_id,       -- кого цитируют
+               author_name,
+               citing_author,   -- кто цитирует
+               citing_author_name
+        FROM new_data.author_citations_view
+        WHERE TRUE
+    """
 
     params = []
     if filters.authors:
         if len(filters.authors) == 1:
-            filters.authors.append(-1)  # добавляем фиктивный ID, чтобы IN (...) работал
+            filters.authors.append(-1)
         query += " AND author_id IN %s"
         params.append(tuple(filters.authors))
 
@@ -48,25 +44,86 @@ def get_filtered_references(filters: ReferencesFilters):
         cur.execute(query, params)
         rows = cur.fetchall()
 
-    authors = {}
-    for row in rows:
-        authors[row[0]] = row[1]
-        authors[row[2]] = row[3]
+    # Считаем веса
+    from collections import defaultdict
 
-    nodes = [{"id": str(aid), "name": name} for aid, name in authors.items()]
+    cited_weights = defaultdict(int)
+    citing_weights = defaultdict(int)
+    links_map = defaultdict(int)
+    author_names = {}
 
-    links_raw = [{"source": str(row[2]), "target": str(row[0]), "title": f"{row[7]} → {row[5]}"} for row in rows]
+    for author_id, author_name, citing_id, citing_name in rows:
+        # Вес — сколько раз этого автора цитировали
+        cited_weights[author_id] += 1
+        # Вес — сколько раз автор кого-то цитировал
+        citing_weights[citing_id] += 1
+        # Сколько раз одна и та же пара авторов
+        links_map[(citing_id, author_id)] += 1
 
-    # Удаляем дубликаты по source, target, title
-    seen = set()
-    links = []
-    for link in links_raw:
-        key = (link["source"], link["target"], link["title"])
-        if key not in seen:
-            seen.add(key)
-            links.append(link)
+        # Имя сохраняем для обоих
+        author_names[author_id] = author_name
+        author_names[citing_id] = citing_name
 
-    return {"nodes": nodes, "links": links, "categories": [{"name": "Автор"}]}
+    # Собираем ноды
+    unique_ids = set(list(cited_weights.keys()) + list(citing_weights.keys()))
+    nodes = []
+    for aid in unique_ids:
+        name = author_names.get(aid, f"Author {aid}")
+        weight = cited_weights.get(aid, 0) or citing_weights.get(aid, 0)
+        nodes.append({
+            "id": str(aid),
+            "name": name,
+            "weight": weight
+        })
+
+    # Собираем связи
+    links = [
+        {
+            "source": str(src),
+            "target": str(tgt),
+            "weight": count
+        }
+        for (src, tgt), count in links_map.items()
+    ]
+
+    return {
+        "nodes": nodes,
+        "links": links,
+        "categories": [{"name": "Автор"}]
+    }
+
+
+@references_bp.route("/articles", methods=["POST"])
+def get_articles_between_authors():
+    try:
+        data = request.get_json()
+        citing_author = data.get("citing_author")
+        cited_author = data.get("cited_author")
+
+        if not (isinstance(citing_author, int) and isinstance(cited_author, int)):
+            abort(400, description="Both citing_author and cited_author must be integers")
+
+        query = """
+            SELECT DISTINCT author_item_title, citing_item_title
+            FROM new_data.author_citations_view
+            WHERE citing_author = %s AND author_id = %s
+        """
+
+        with DatabaseService("new_data") as cur:
+            cur.execute(query, (citing_author, cited_author))
+            articles = [
+                {
+                    "cited_title": row[0],
+                    "citing_title": row[1]
+                }
+                for row in cur.fetchall()
+            ]
+
+        return jsonify(articles)
+
+    except Exception as e:
+        logging.exception(e)
+        return jsonify({"error": str(e)}), 500
 
 
 @references_bp.route("/data", methods=["POST"])

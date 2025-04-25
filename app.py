@@ -484,8 +484,10 @@ def get_authors_by_city():
         app.logger.error(f"Error in /api/authors/by-city: {str(e)}")
         abort(500, description="Internal server error")
     finally:
-        if cur: cur.close()
-        if conn: conn.close()
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 
 @app.route("/api/statistics/authors-by-city", methods=["GET"])
