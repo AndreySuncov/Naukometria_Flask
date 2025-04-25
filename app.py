@@ -1033,14 +1033,14 @@ def get_popular_keywords():
         if conn: conn.close()
 
 
-@app.route('/api/statistics/rating/organizations-by-keyword', methods=['GET'])
-def get_top_organizations_by_keyword():
-    """Топ организаций по ключевому слову"""
+@app.route('/api/statistics/rating/keywords-by-organization', methods=['GET'])
+def get_top_keywords_by_organization():
+    """Топ ключевых слов по ID организации"""
     conn = cur = None
     try:
-        keyword = request.args.get('keyword')
-        if not keyword:
-            abort(400, description="Parameter 'keyword' is required")
+        org_id = request.args.get('organizationid')
+        if not org_id or not org_id.isdigit():
+            abort(400, description="Parameter 'organizationid' is required and must be integer")
 
         min_count = validate_int(request.args.get("min_count"), 1, 10**6, "min_count") or 10
         limit = validate_int(request.args.get("limit"), 1, 100, "limit") or 10
@@ -1049,22 +1049,16 @@ def get_top_organizations_by_keyword():
         cur = conn.cursor()
 
         query = """
-            SELECT
-                organizationid AS organization,
-                organizationname AS name,
-                COUNT(DISTINCT itemid) AS count
-            FROM organization_keyword_items_mv
-            WHERE keyword ILIKE %s
-            GROUP BY organizationid, organizationname
+            SELECT keyword, COUNT(DISTINCT itemid) AS count
+            FROM new_data.organization_keyword_items_mv
+            WHERE organizationid = %s
+            GROUP BY keyword
             HAVING COUNT(DISTINCT itemid) >= %s
             ORDER BY count DESC
-            LIMIT %s
+            LIMIT %s;
         """
-        cur.execute(query, (f"%{keyword}%", min_count, limit))
-        results = [
-            {"organization": row[0], "name": row[1], "count": row[2]}
-            for row in cur.fetchall()
-        ]
+        cur.execute(query, (int(org_id), min_count, limit))
+        results = [{"keyword": row[0], "count": row[1]} for row in cur.fetchall()]
 
         return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
