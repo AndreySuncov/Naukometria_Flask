@@ -1050,7 +1050,7 @@ def get_top_keywords_by_organization():
 
         query = """
             SELECT keyword, COUNT(DISTINCT itemid) AS count
-            FROM new_data.organization_keyword_items_mv
+            FROM organization_keyword_items_mv
             WHERE organizationid = %s
             GROUP BY keyword
             HAVING COUNT(DISTINCT itemid) >= %s
