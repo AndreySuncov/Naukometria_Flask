@@ -478,7 +478,7 @@ def get_authors_by_city():
             {"name": row[0], "publications": row[1]}
             for row in cur.fetchall()
         ]
-        return jsonify(data)
+        return Response(json.dumps(data, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
     except Exception as e:
         app.logger.error(f"Error in /api/authors/by-city: {str(e)}")
@@ -911,7 +911,7 @@ def get_journals_reference():
         cur.execute(query)
         results = [{"issn": row[0], "name": row[1]} for row in cur.fetchall()]
 
-        return jsonify(results)
+        return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -994,7 +994,7 @@ def get_popular_organizations():
         cur.execute(query, (min_publications,))
         results = [row[0] for row in cur.fetchall()]
 
-        return jsonify(results)
+        return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1024,7 +1024,7 @@ def get_popular_keywords():
         cur.execute(query, (min_publications,))
         results = [row[0] for row in cur.fetchall()]
 
-        return jsonify(results)
+        return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1049,21 +1049,22 @@ def get_top_organizations_by_keyword():
         cur = conn.cursor()
 
         query = """
-            SELECT 
-                e.organizationname AS organization,
-                COUNT(DISTINCT k.itemid) AS count
-            FROM keywords k
-            JOIN authors a ON k.itemid = a.itemid
-            JOIN affiliations af ON a.authorid = af.author
-            JOIN elibrary_organizations e ON af.affiliationid = e.organizationid
-            WHERE k.keyword ILIKE %s
-            GROUP BY e.organizationname
-            HAVING COUNT(DISTINCT k.itemid) >= %s
+            SELECT
+                organizationid AS organization,
+                organizationname AS name,
+                COUNT(DISTINCT itemid) AS count
+            FROM organization_keyword_items_mv
+            WHERE keyword ILIKE %s
+            GROUP BY organizationid, organizationname
+            HAVING COUNT(DISTINCT itemid) >= %s
             ORDER BY count DESC
             LIMIT %s
         """
         cur.execute(query, (f"%{keyword}%", min_count, limit))
-        results = [[row[0], row[1]] for row in cur.fetchall()]
+        results = [
+            {"organization": row[0], "name": row[1], "count": row[2]}
+            for row in cur.fetchall()
+        ]
 
         return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
@@ -1072,6 +1073,7 @@ def get_top_organizations_by_keyword():
     finally:
         if cur: cur.close()
         if conn: conn.close()
+
         
 @app.route('/api/statistics/rating/keywords-by-organization', methods=['GET'])
 def get_top_keywords_by_organization():
@@ -1099,9 +1101,7 @@ def get_top_keywords_by_organization():
         cur.execute(query, (f"%{organization}%", min_count, limit))
         results = [[row[0], row[1]] for row in cur.fetchall()]
 
-
-
-        return jsonify(results)  # Возвращаем массив напрямую
+        return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
