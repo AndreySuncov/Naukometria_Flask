@@ -504,7 +504,7 @@ def get_author_distribution_by_city():
         query = """
                 SELECT normalized_city, authors_count
                 FROM authors_by_city_mv
-                WHERE publications_count >= %s
+                WHERE authors_count >= %s
                 ORDER BY authors_count DESC
                 """
         cur.execute(query, (min_publications,))
