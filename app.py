@@ -1133,6 +1133,8 @@ def site_map_route():
 def not_found(error):
     return jsonify({"error": "Not found"}), 404
 
+app.register_blueprint(graph_bp)
+
 
 @app.route("/")
 def home():
