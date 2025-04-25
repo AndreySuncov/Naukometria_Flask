@@ -993,7 +993,7 @@ def get_top_organizations_by_keyword():
 
         query = """
             SELECT
-                organizationid AS organization,
+                
                 organizationname AS name,
                 COUNT(DISTINCT itemid) AS count
             FROM organization_keyword_items_mv
