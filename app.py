@@ -1020,27 +1020,24 @@ def get_top_organizations_by_keyword():
 
 @app.route('/api/statistics/rating/organizations', methods=['GET'])
 def get_popular_organizations():
-    """Получение списка организаций из materialized view"""
+    """Получение списка организаций с ID"""
     conn = cur = None
     try:
-        min_publications = validate_int(request.args.get("min_publications"), 1, 10**6, "min_publications")
-        if min_publications is None:
-            min_publications = 200
+        min_publications = validate_int(request.args.get("min_publications"), 1, 10**6, "min_publications") or 200
 
         conn = get_db_connection()
         cur = conn.cursor()
 
         query = """
-            SELECT organization
+            SELECT id, organization AS name, publications_count
             FROM popular_organizations_mv
             WHERE publications_count >= %s
-            ORDER BY organization
+            ORDER BY name
         """
         cur.execute(query, (min_publications,))
-        results = [row[0] for row in cur.fetchall()]
+        results = [{"id": row[0], "name": row[1], "count": row[2]} for row in cur.fetchall()]
 
         return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -1106,14 +1103,11 @@ def get_top_keywords_by_organization():
         results = [{"keyword": row[0], "count": row[1]} for row in cur.fetchall()]
 
         return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
         if cur: cur.close()
         if conn: conn.close()
-
-app.register_blueprint(graph_bp)
 
 
 def has_no_empty_params(rule):
