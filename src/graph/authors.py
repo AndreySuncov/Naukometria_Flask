@@ -30,7 +30,12 @@ def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.curso
             (SELECT string_agg(LEFT(TRIM(word), 1) || '.', '')
                 FROM unnest(string_to_array(regexp_replace(initials, '[.]', ' ', 'g'), ' ')) AS word
                 WHERE TRIM(word) <> '') AS name,
-            a.itemid
+            a.itemid,
+            CASE
+                WHEN a.language = 'RU' THEN 0
+                WHEN a.language = 'EN' THEN 1
+                ELSE 2
+                END                  as lang_priority
         FROM authors a
                 JOIN affiliations aff ON a.id = aff.author
                 JOIN keywords k ON a.itemid = k.itemid
@@ -48,7 +53,12 @@ def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.curso
                                                 (SELECT string_agg(LEFT(TRIM(word), 1) || '.', '')
                                                 FROM unnest(string_to_array(regexp_replace(a.initials, '[.]', ' ', 'g'), ' ')) AS word
                                                 WHERE TRIM(word) <> '') AS name,
-                                                a.itemid                 as itemid
+                                                a.itemid                 as itemid,
+                                                CASE
+                                                    WHEN a.language = 'RU' THEN 0
+                                                    WHEN a.language = 'EN' THEN 1
+                                                    ELSE 2
+                                                    END                  as lang_priority
         FROM authors a
                 JOIN related_authors_ids rela ON a.authorid = rela.authorid
                 JOIN filtered_authors fa ON a.itemid = fa.itemid
@@ -81,14 +91,14 @@ def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.curso
     cur.execute(query_temp_table, params)
     query_nodes = """
         SELECT authorid,
-            array_agg(DISTINCT INITCAP(name)),
+            get_unique_sorted_names(array_agg(initcap(name)), array_agg(lang_priority)),
             COUNT(DISTINCT itemid) AS total_publications,
             1 as category
         FROM filtered_authors
         GROUP BY authorid
         UNION
         SELECT authorid,
-            array_agg(DISTINCT INITCAP(name)),
+            get_unique_sorted_names(array_agg(initcap(name)), array_agg(lang_priority)),
             COUNT(DISTINCT itemid) AS total_publications,
             0 as category
         FROM related_authors
