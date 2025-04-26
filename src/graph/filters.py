@@ -14,12 +14,55 @@ def get_authors_filter():
             FROM authors_names_with_priority_view
             {where_clauses}
         )
-        SELECT DISTINCT ON (auv.value)
-            auv.value,
-            auv.name
-        FROM authors_names_with_priority_view auv
-        JOIN matched_authors ma ON auv.value = ma.value
-        ORDER BY auv.value, auv.lang_priority, auv.name_length DESC
+        SELECT value, name FROM (
+            SELECT DISTINCT ON (auv.value)
+                auv.value,
+                auv.name
+            FROM authors_names_with_priority_view auv
+            JOIN matched_authors ma ON auv.value = ma.value
+            ORDER BY auv.value, auv.lang_priority, auv.name_length DESC
+        ) AS sub
+        ORDER BY 
+            (name ~ '^[а-яА-ЯёЁ]') DESC,  -- Сначала кириллица (TRUE идет раньше FALSE)
+            name     -- Затем сортировка по алфавиту
+
+    """
+
+    data = fetch_paginated_options(
+        query=query,
+        label_column="name",
+        value_column="value",
+        order_by_label=False,
+    )
+    return jsonify(data)
+
+
+@filters_bp.route("/authors_with_references", methods=["GET"])
+def get_authors_with_references_filter():
+    query = """
+        WITH matched_authors AS (
+            SELECT DISTINCT value
+            FROM authors_names_with_priority_view
+            JOIN (
+                SELECT DISTINCT author_id as authorid
+                FROM author_citations_view
+                UNION
+                SELECT DISTINCT citing_author as authorid
+                FROM author_citations_view
+            ) citing ON authors_names_with_priority_view.value = citing.authorid
+            {where_clauses}
+        )
+        SELECT value, name FROM (
+            SELECT DISTINCT ON (auv.value)
+                auv.value,
+                auv.name
+            FROM authors_names_with_priority_view auv
+            JOIN matched_authors ma ON auv.value = ma.value
+            ORDER BY auv.value, auv.lang_priority, auv.name_length DESC
+        ) AS sub
+        ORDER BY 
+            (name ~ '^[а-яА-ЯёЁ]') DESC,  -- Сначала кириллица (TRUE идет раньше FALSE)
+            name     -- Затем сортировка по алфавиту
     """
 
     data = fetch_paginated_options(
