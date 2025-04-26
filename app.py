@@ -719,7 +719,7 @@ def get_keywords_statistics():
         query = """
             SELECT keyword, language, count
             FROM new_data.keyword_year_stats_mv
-            WHERE year = %s ...
+            WHERE year = %s 
         """
         params = [year]
 
@@ -731,7 +731,7 @@ def get_keywords_statistics():
             query += " AND language = %s"
             params.append(language_filter.upper())
 
-        query += " GROUP BY keyword, language ORDER BY count DESC"
+        query += " GROUP BY keyword, language, count ORDER BY count DESC"
 
         if limit is not None:
             query += " LIMIT %s"
