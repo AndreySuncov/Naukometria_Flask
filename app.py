@@ -1122,7 +1122,7 @@ def site_map_route():
     routes = []
 
     for rule in app.url_map.iter_rules():
-        if "GET" in rule.methods and has_no_empty_params(rule):  # type: ignore
+        if has_no_empty_params(rule):  # type: ignore
             url = url_for(rule.endpoint, **(rule.defaults or {}))
             routes.append((url, rule.endpoint))
 
