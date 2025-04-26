@@ -478,14 +478,16 @@ def get_authors_by_city():
             {"name": row[0], "publications": row[1]}
             for row in cur.fetchall()
         ]
-        return jsonify(data)
+        return Response(json.dumps(data, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
     except Exception as e:
         app.logger.error(f"Error in /api/authors/by-city: {str(e)}")
         abort(500, description="Internal server error")
     finally:
-        if cur: cur.close()
-        if conn: conn.close()
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 
 @app.route("/api/statistics/authors-by-city", methods=["GET"])
@@ -717,7 +719,7 @@ def get_keywords_statistics():
         query = """
             SELECT keyword, language, count
             FROM new_data.keyword_year_stats_mv
-            WHERE year = %s ...
+            WHERE year = %s 
         """
         params = [year]
 
@@ -729,7 +731,7 @@ def get_keywords_statistics():
             query += " AND language = %s"
             params.append(language_filter.upper())
 
-        query += " GROUP BY keyword, language ORDER BY count DESC"
+        query += " GROUP BY keyword, language, count ORDER BY count DESC"
 
         if limit is not None:
             query += " LIMIT %s"
@@ -911,7 +913,7 @@ def get_journals_reference():
         cur.execute(query)
         results = [{"issn": row[0], "name": row[1]} for row in cur.fetchall()]
 
-        return jsonify(results)
+        return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -973,29 +975,69 @@ def get_keywords():
         if conn:
             conn.close()
 
-@app.route('/api/statistics/rating/organizations', methods=['GET'])
-def get_popular_organizations():
-    """Получение списка организаций из materialized view"""
+
+@app.route('/api/statistics/rating/organizations-by-keyword', methods=['GET'])
+def get_top_organizations_by_keyword():
+    """Топ организаций по ключевому слову"""
     conn = cur = None
     try:
-        min_publications = validate_int(request.args.get("min_publications"), 1, 10**6, "min_publications")
-        if min_publications is None:
-            min_publications = 200
+        keyword = request.args.get('keyword')
+        if not keyword:
+            abort(400, description="Parameter 'keyword' is required")
+
+        min_count = validate_int(request.args.get("min_count"), 1, 10**6, "min_count") or 10
+        limit = validate_int(request.args.get("limit"), 1, 100, "limit") or 10
 
         conn = get_db_connection()
         cur = conn.cursor()
 
         query = """
-            SELECT organization
+            SELECT
+                organizationid AS organization,
+                organizationname AS name,
+                COUNT(DISTINCT itemid) AS count
+            FROM organization_keyword_items_mv
+            WHERE keyword ILIKE %s
+            GROUP BY organizationid, organizationname
+            HAVING COUNT(DISTINCT itemid) >= %s
+            ORDER BY count DESC
+            LIMIT %s
+        """
+        cur.execute(query, (f"%{keyword}%", min_count, limit))
+        results = [
+            {"organization": row[0], "name": row[1], "count": row[2]}
+            for row in cur.fetchall()
+        ]
+
+        return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+
+@app.route('/api/statistics/rating/organizations', methods=['GET'])
+def get_popular_organizations():
+    """Получение списка организаций с ID"""
+    conn = cur = None
+    try:
+        min_publications = validate_int(request.args.get("min_publications"), 1, 10**6, "min_publications") or 200
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        query = """
+            SELECT id, organization AS name, publications_count
             FROM popular_organizations_mv
             WHERE publications_count >= %s
-            ORDER BY organization
+            ORDER BY name
         """
         cur.execute(query, (min_publications,))
-        results = [row[0] for row in cur.fetchall()]
+        results = [{"id": row[0], "name": row[1], "count": row[2]} for row in cur.fetchall()]
 
-        return jsonify(results)
-
+        return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -1024,47 +1066,6 @@ def get_popular_keywords():
         cur.execute(query, (min_publications,))
         results = [row[0] for row in cur.fetchall()]
 
-        return jsonify(results)
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        if cur: cur.close()
-        if conn: conn.close()
-
-
-@app.route('/api/statistics/rating/organizations-by-keyword', methods=['GET'])
-def get_top_organizations_by_keyword():
-    """Топ организаций по ключевому слову"""
-    conn = cur = None
-    try:
-        keyword = request.args.get('keyword')
-        if not keyword:
-            abort(400, description="Parameter 'keyword' is required")
-
-        min_count = validate_int(request.args.get("min_count"), 1, 10**6, "min_count") or 10
-        limit = validate_int(request.args.get("limit"), 1, 100, "limit") or 10
-
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        query = """
-            SELECT 
-                e.organizationname AS organization,
-                COUNT(DISTINCT k.itemid) AS count
-            FROM keywords k
-            JOIN authors a ON k.itemid = a.itemid
-            JOIN affiliations af ON a.authorid = af.author
-            JOIN elibrary_organizations e ON af.affiliationid = e.organizationid
-            WHERE k.keyword ILIKE %s
-            GROUP BY e.organizationname
-            HAVING COUNT(DISTINCT k.itemid) >= %s
-            ORDER BY count DESC
-            LIMIT %s
-        """
-        cur.execute(query, (f"%{keyword}%", min_count, limit))
-        results = [[row[0], row[1]] for row in cur.fetchall()]
-
         return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
     except Exception as e:
@@ -1072,15 +1073,16 @@ def get_top_organizations_by_keyword():
     finally:
         if cur: cur.close()
         if conn: conn.close()
-        
+
+
 @app.route('/api/statistics/rating/keywords-by-organization', methods=['GET'])
 def get_top_keywords_by_organization():
-    """Топ ключевых слов по организации"""
+    """Топ ключевых слов по ID организации"""
     conn = cur = None
     try:
-        organization = request.args.get('organization')
-        if not organization:
-            abort(400, description="Parameter 'organization' is required")
+        org_id = request.args.get('organizationid')
+        if not org_id or not org_id.isdigit():
+            abort(400, description="Parameter 'organizationid' is required and must be integer")
 
         min_count = validate_int(request.args.get("min_count"), 1, 10**6, "min_count") or 10
         limit = validate_int(request.args.get("limit"), 1, 100, "limit") or 10
@@ -1089,27 +1091,23 @@ def get_top_keywords_by_organization():
         cur = conn.cursor()
 
         query = """
-            SELECT keyword, count
-            FROM new_data.keywords_by_organization_mv
-            WHERE organizationname ILIKE %s
-              AND count >= %s
+            SELECT keyword, COUNT(DISTINCT itemid) AS count
+            FROM organization_keyword_items_mv
+            WHERE organizationid = %s
+            GROUP BY keyword
+            HAVING COUNT(DISTINCT itemid) >= %s
             ORDER BY count DESC
             LIMIT %s;
         """
-        cur.execute(query, (f"%{organization}%", min_count, limit))
-        results = [[row[0], row[1]] for row in cur.fetchall()]
+        cur.execute(query, (int(org_id), min_count, limit))
+        results = [{"keyword": row[0], "count": row[1]} for row in cur.fetchall()]
 
-
-
-        return jsonify(results)  # Возвращаем массив напрямую
-
+        return Response(json.dumps(results, ensure_ascii=False), mimetype="application/json; charset=utf-8")
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
         if cur: cur.close()
         if conn: conn.close()
-
-app.register_blueprint(graph_bp)
 
 
 def has_no_empty_params(rule):
@@ -1135,10 +1133,12 @@ def site_map_route():
 def not_found(error):
     return jsonify({"error": "Not found"}), 404
 
+app.register_blueprint(graph_bp)
+
 
 @app.route("/")
 def home():
-    return "Электронная библиотека API v2.6 Андрей Сунцов"
+    return "API для ВКР 'Наукометрическая система', Андрей Сунцов, Преснухин Дмитрий, Мерзлова Анастасия, Егорова Ева"
 
 
 if __name__ == "__main__":
