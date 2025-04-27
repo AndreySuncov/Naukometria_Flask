@@ -163,21 +163,21 @@ def get_author_table_nodes():
             return abort(400, description="authors filter is required (at least one author)")
 
         with DatabaseService("new_data") as cur:
-            where_clauses = ["authorid IS NOT NULL"]
+            where_clauses = []
             params = []
 
             if filters.authors:
-                where_clauses.append("authorid IN %s")
-                params.append(tuple(filters.authors))
+                where_clauses.append("authorid = ANY(%s)")
+                params.append(filters.authors)
             if filters.organizations:
-                where_clauses.append("affiliationid IN %s")
-                params.append(tuple(filters.organizations))
+                where_clauses.append("affiliationid = ANY(%s)")
+                params.append(filters.organizations)
             if filters.keywords:
-                where_clauses.append("keyword IN %s")
-                params.append(tuple(filters.keywords))
+                where_clauses.append("keyword = ANY(%s)")
+                params.append(filters.keywords)
             if filters.cities:
-                where_clauses.append("town IN %s")
-                params.append(tuple(filters.cities))
+                where_clauses.append("town = ANY(%s)")
+                params.append(filters.cities)
 
             where_clause = " AND ".join(where_clauses)
 
@@ -227,16 +227,15 @@ def get_author_table_links():
             ]
             params = [source, target]
 
-            # Добавляем остальные фильтры
             if filters.organizations:
-                where_clauses.append("a1.affiliationid IN %s")
-                params.append(tuple(filters.organizations))
+                where_clauses.append("a1.affiliationid = ANY(%s)")
+                params.append(filters.organizations)
             if filters.keywords:
-                where_clauses.append("a1.keyword IN %s")
-                params.append(tuple(filters.keywords))
+                where_clauses.append("a1.keyword = ANY(%s)")
+                params.append(filters.keywords)
             if filters.cities:
-                where_clauses.append("a1.town IN %s")
-                params.append(tuple(filters.cities))
+                where_clauses.append("a1.town = ANY(%s)")
+                params.append(filters.cities)
 
             where_clause = " AND ".join(where_clauses)
 
