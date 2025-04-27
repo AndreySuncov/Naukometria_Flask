@@ -149,31 +149,46 @@ def get_authors_graph_data():
         return jsonify({"error": str(e)}), 500
 
 
-@authors_bp.route("/table/node", methods=["GET"])
+@authors_bp.route("/table/node", methods=["POST"])
 def get_author_table_nodes():
     """
-    TODO: добавить обработку `AuthorsFilters`
-    Кроме фильтра по авторам и минимуму публикаций, разумеется
-
-    Метод поменяется на POST, чтобы можно было передавать фильтры
+    Обработка фильтров AuthorsFilters через materialized view
     """
     try:
-        authorid = request.args.get("id", "")
+        data = request.get_json()
+        filters: AuthorsFilters = from_dict(AuthorsFilters, data)
         page = int(request.args.get("page", 1))
 
-        if not authorid:
-            return abort(400, description="authorid is required")
+        if not filters.authors:
+            return abort(400, description="authors filter is required (at least one author)")
 
         with DatabaseService("new_data") as cur:
-            query = """
-                SELECT DISTINCT a.itemid as key, i.title, i.year, j.name as journal, i.link
-                FROM authors a
-                JOIN items i ON a.itemid = i.itemid
-                LEFT JOIN journals j ON i.itemid = j.itemid
-                WHERE a.authorid = %s
-                ORDER BY i.year DESC, i.title
+            where_clauses = ["authorid IS NOT NULL"]
+            params = []
+
+            if filters.authors:
+                where_clauses.append("authorid IN %s")
+                params.append(tuple(filters.authors))
+            if filters.organizations:
+                where_clauses.append("affiliationid IN %s")
+                params.append(tuple(filters.organizations))
+            if filters.keywords:
+                where_clauses.append("keyword IN %s")
+                params.append(tuple(filters.keywords))
+            if filters.cities:
+                where_clauses.append("town IN %s")
+                params.append(tuple(filters.cities))
+
+            where_clause = " AND ".join(where_clauses)
+
+            query = f"""
+                SELECT DISTINCT itemid as key, title, year, journal, link
+                FROM authors_items_view
+                WHERE {where_clause}
+                ORDER BY year DESC, title
             """
-            rows, has_more = fetch_paginated(query, page=page, items_on_page=5, params=(authorid,), cursor=cur)
+
+            rows, has_more = fetch_paginated(query, page=page, items_on_page=5, params=tuple(params), cursor=cur)
 
             if not cur.description:
                 return abort(500, description="Не удалось получить описание столбцов")
@@ -189,33 +204,51 @@ def get_author_table_nodes():
         return jsonify({"error": str(e)}), 500
 
 
-@authors_bp.route("/table/link", methods=["GET"])
+@authors_bp.route("/table/link", methods=["POST"])
 def get_author_table_links():
     """
-        TODO: добавить обработку `AuthorsFilters` 
-        Кроме фильтра по авторам и минимуму публикаций, разумеется
-        
-        Метод поменяется на POST, чтобы можно было передавать фильтры
+    Обработка AuthorsFilters через materialized view для связей между двумя авторами
     """
     try:
-        source = request.args.get("source", "")
-        target = request.args.get("target", "")
+        data = request.get_json()
+        filters: AuthorsFilters = from_dict(AuthorsFilters, data)
         page = int(request.args.get("page", 1))
 
-        if not source or not target:
-            return abort(400, description="source and target are required")
+        if not filters.authors or len(filters.authors) < 2:
+            return abort(400, description="source and target authors are required (at least two authors)")
+
+        source = filters.authors[0]
+        target = filters.authors[1]
 
         with DatabaseService("new_data") as cur:
-            query = """
-                SELECT DISTINCT a.itemid as key, i.title, i.year, j.name as journal, i.link, a.lastname, a2.lastname
-                FROM authors a
-                        JOIN authors a2 ON a.itemid = a2.itemid
-                        JOIN items i ON a.itemid = i.itemid
-                        LEFT JOIN journals j ON i.itemid = j.itemid
-                WHERE a.authorid = %s
-                AND a2.authorid = %s
+            where_clauses = [
+                "a1.authorid = %s",
+                "a2.authorid = %s"
+            ]
+            params = [source, target]
+
+            # Добавляем остальные фильтры
+            if filters.organizations:
+                where_clauses.append("a1.affiliationid IN %s")
+                params.append(tuple(filters.organizations))
+            if filters.keywords:
+                where_clauses.append("a1.keyword IN %s")
+                params.append(tuple(filters.keywords))
+            if filters.cities:
+                where_clauses.append("a1.town IN %s")
+                params.append(tuple(filters.cities))
+
+            where_clause = " AND ".join(where_clauses)
+
+            query = f"""
+                SELECT DISTINCT a1.itemid as key, a1.title, a1.year, a1.journal, a1.link
+                FROM authors_items_view a1
+                JOIN authors_items_view a2 ON a1.itemid = a2.itemid
+                WHERE {where_clause}
+                ORDER BY a1.year DESC, a1.title
             """
-            rows, has_more = fetch_paginated(query, page=page, items_on_page=5, params=(source, target), cursor=cur)
+
+            rows, has_more = fetch_paginated(query, page=page, items_on_page=5, params=tuple(params), cursor=cur)
 
             if not cur.description:
                 return abort(500, description="Не удалось получить описание столбцов")
