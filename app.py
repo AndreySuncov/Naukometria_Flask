@@ -813,7 +813,7 @@ def get_all_keywords():
             conn.close()
 
 
-@app.route('/api/statistics/vak-categories', methods=['POST'])
+@app.route('/api/statistics/vak-categories', methods=['GET'])
 def get_vak_statistics_by_category():
     conn = cur = None
     try:
