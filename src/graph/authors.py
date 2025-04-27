@@ -182,14 +182,9 @@ def get_author_table_nodes():
             where_clause = " AND ".join(where_clauses)
 
             query = f"""
-                SELECT *
-                FROM (
-                    SELECT DISTINCT ON (itemid) itemid AS key, title, year, journal, link
-                    FROM authors_items_view
-                    WHERE {where_clause}
-                    ORDER BY itemid, year DESC NULLS LAST, title
-                ) AS subquery
-                ORDER BY year DESC NULLS LAST, title, key
+                SELECT DISTINCT ON (itemid) itemid AS key, title, year, journal, link
+                FROM authors_items_view
+                WHERE {where_clause}
             """
 
             rows, has_more = fetch_paginated(
