@@ -199,9 +199,12 @@ def get_author_table_nodes():
                 return abort(500, description="Не удалось получить описание столбцов")
 
             column_names = [desc[0] for desc in cur.description]
-            result = [dict(zip(column_names, row)) for row in rows]
+            per_page = int(request.args.get("per_page", 5))
+
+            result = [dict(zip(column_names, row)) for row in rows[:per_page]]
 
             return jsonify({"items": result, "hasMore": has_more})
+
 
     except Exception as e:
         logging.exception(e)
