@@ -182,9 +182,12 @@ def get_author_table_nodes():
             where_clause = " AND ".join(where_clauses)
 
             query = f"""
-                SELECT DISTINCT itemid as key, title, year, journal, link
-                FROM authors_items_view
-                WHERE {where_clause}
+                SELECT *
+                FROM (
+                    SELECT DISTINCT itemid as key, title, year, journal, link
+                    FROM authors_items_view
+                    WHERE {where_clause}
+                ) AS subquery
                 ORDER BY year DESC, title
             """
 
