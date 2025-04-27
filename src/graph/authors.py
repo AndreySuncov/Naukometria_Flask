@@ -184,25 +184,31 @@ def get_author_table_nodes():
             query = f"""
                 SELECT *
                 FROM (
-                    SELECT DISTINCT itemid as key, title, year, journal, link
+                    SELECT DISTINCT ON (itemid) itemid AS key, title, year, journal, link
                     FROM authors_items_view
                     WHERE {where_clause}
+                    ORDER BY itemid, year DESC, title
                 ) AS subquery
                 ORDER BY year DESC, title
             """
 
-            rows, has_more = fetch_paginated(query, page=page, items_on_page=5, params=tuple(params), cursor=cur)
+            rows, has_more = fetch_paginated(
+                query=query,
+                page=page,
+                items_on_page=5,
+                params=tuple(params),
+                cursor=cur,
+            )
 
             if not cur.description:
                 return abort(500, description="Не удалось получить описание столбцов")
 
             column_names = [desc[0] for desc in cur.description]
-
             result = [dict(zip(column_names, row)) for row in rows]
 
             return jsonify({"items": result, "hasMore": has_more})
 
-    except Exception as e:  # pylint: disable=broad-except
+    except Exception as e:
         logging.exception(e)
         return jsonify({"error": str(e)}), 500
 
@@ -245,25 +251,31 @@ def get_author_table_links():
             query = f"""
                 SELECT *
                 FROM (
-                    SELECT DISTINCT a1.itemid as key, a1.title, a1.year, a1.journal, a1.link
+                    SELECT DISTINCT ON (a1.itemid) a1.itemid AS key, a1.title, a1.year, a1.journal, a1.link
                     FROM authors_items_view a1
                     JOIN authors_items_view a2 ON a1.itemid = a2.itemid
                     WHERE {where_clause}
+                    ORDER BY a1.itemid, a1.year DESC, a1.title
                 ) AS subquery
                 ORDER BY year DESC, title
             """
 
-            rows, has_more = fetch_paginated(query, page=page, items_on_page=5, params=tuple(params), cursor=cur)
+            rows, has_more = fetch_paginated(
+                query=query,
+                page=page,
+                items_on_page=5,
+                params=tuple(params),
+                cursor=cur,
+            )
 
             if not cur.description:
                 return abort(500, description="Не удалось получить описание столбцов")
 
             column_names = [desc[0] for desc in cur.description]
-
             result = [dict(zip(column_names, row)) for row in rows]
 
             return jsonify({"items": result, "hasMore": has_more})
 
-    except Exception as e:  # pylint: disable=broad-except
+    except Exception as e:
         logging.exception(e)
         return jsonify({"error": str(e)}), 500
