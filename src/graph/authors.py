@@ -151,6 +151,12 @@ def get_authors_graph_data():
 
 @authors_bp.route("/table/node", methods=["GET"])
 def get_author_table_nodes():
+    """
+    TODO: добавить обработку `AuthorsFilters`
+    Кроме фильтра по авторам и минимуму публикаций, разумеется
+
+    Метод поменяется на POST, чтобы можно было передавать фильтры
+    """
     try:
         authorid = request.args.get("id", "")
         page = int(request.args.get("page", 1))
@@ -185,6 +191,12 @@ def get_author_table_nodes():
 
 @authors_bp.route("/table/link", methods=["GET"])
 def get_author_table_links():
+    """
+        TODO: добавить обработку `AuthorsFilters` 
+        Кроме фильтра по авторам и минимуму публикаций, разумеется
+        
+        Метод поменяется на POST, чтобы можно было передавать фильтры
+    """
     try:
         source = request.args.get("source", "")
         target = request.args.get("target", "")
