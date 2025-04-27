@@ -759,6 +759,34 @@ def get_keywords_statistics():
             conn.close()
 
 
+@app.route("/api/statistics/years", methods=["GET"])
+def get_available_years():
+    conn = cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        query = """
+            SELECT DISTINCT year
+            FROM new_data.keyword_year_stats_mv
+            WHERE year IS NOT NULL
+            ORDER BY year DESC
+        """
+
+        cur.execute(query)
+        years = [row[0] for row in cur.fetchall()]
+
+        return jsonify({"items": years})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
 @app.route("/api/keywords/all", methods=["GET"])
 def get_all_keywords():
     conn = cur = None
