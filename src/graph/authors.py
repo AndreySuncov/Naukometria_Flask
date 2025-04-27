@@ -247,15 +247,11 @@ def get_author_table_links():
             where_clause = " AND ".join(where_clauses)
 
             query = f"""
-                SELECT *
-                FROM (
-                    SELECT DISTINCT ON (a1.itemid) a1.itemid AS key, a1.title, a1.year, a1.journal, a1.link
-                    FROM authors_items_view a1
-                    JOIN authors_items_view a2 ON a1.itemid = a2.itemid
-                    WHERE {where_clause}
-                    ORDER BY a1.itemid, a1.year DESC, a1.title
-                ) AS subquery
-                ORDER BY year DESC, title
+                SELECT DISTINCT ON (a1.itemid) a1.itemid AS key, a1.title, a1.year, a1.journal, a1.link
+                FROM authors_items_view a1
+                JOIN authors_items_view a2 ON a1.itemid = a2.itemid
+                WHERE {where_clause}
+
             """
 
             rows, has_more = fetch_paginated(
@@ -270,7 +266,9 @@ def get_author_table_links():
                 return abort(500, description="Не удалось получить описание столбцов")
 
             column_names = [desc[0] for desc in cur.description]
-            result = [dict(zip(column_names, row)) for row in rows]
+            per_page = int(request.args.get("per_page", 5))
+
+            result = [dict(zip(column_names, row)) for row in rows[:per_page]]
 
             return jsonify({"items": result, "hasMore": has_more})
 
