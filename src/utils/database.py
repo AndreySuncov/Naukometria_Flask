@@ -2,11 +2,12 @@ import logging
 from typing import Any
 
 from flask import request
+import psycopg2
 
 from src.database.database import DatabaseService
 
 
-def fetch_paginated_options(
+def fetch_paginated_filter_options(
     query: str,
     label_column: str,
     value_column: str,
@@ -69,3 +70,33 @@ def fetch_paginated_options(
             "debug_sql": full_query if "full_query" in locals() else "not built",  # type: ignore
             "debug_params": params if "params" in locals() else "not set",  # type: ignore
         }
+
+
+def fetch_paginated(
+    query: str,
+    page: int = 1,
+    items_on_page: int = 5,
+    params: tuple = (),
+    cursor: psycopg2.extensions.cursor | None = None,
+):
+    """Универсальная функция для получения данных с пагинацией
+
+    Args:
+        query: Базовый SQL запрос без условий LIMIT/OFFSET
+        page: Номер страницы
+        items_on_page: Количество элементов на странице
+    """
+    per_page = int(request.args.get("per_page", items_on_page))
+    offset = (page - 1) * per_page
+
+    if cursor is None:
+        with DatabaseService("new_data") as cur:
+            cur.execute(f"{query} LIMIT %s OFFSET %s;", (*params, per_page + 1, offset))
+            rows = cur.fetchall()
+
+            return (rows, len(rows) > per_page)
+    else:
+        cursor.execute(f"{query} LIMIT %s OFFSET %s;", (*params, per_page + 1, offset))
+        rows = cursor.fetchall()
+
+        return (rows, len(rows) > per_page)

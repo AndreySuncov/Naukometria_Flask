@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify
 
-from ..utils.databse import fetch_paginated_options
+from ..utils.database import fetch_paginated_filter_options
 
 
 filters_bp = Blueprint("graph_filters", __name__, url_prefix="/filters")
@@ -28,7 +28,7 @@ def get_authors_filter():
 
     """
 
-    data = fetch_paginated_options(
+    data = fetch_paginated_filter_options(
         query=query,
         label_column="name",
         value_column="value",
@@ -65,7 +65,7 @@ def get_cited_authors():
             name     -- Затем сортировка по алфавиту
     """
 
-    data = fetch_paginated_options(
+    data = fetch_paginated_filter_options(
         query=query,
         label_column="name",
         value_column="value",
@@ -102,7 +102,7 @@ def get_citing_authors():
             name     -- Затем сортировка по алфавиту
     """
 
-    data = fetch_paginated_options(
+    data = fetch_paginated_filter_options(
         query=query,
         label_column="name",
         value_column="value",
@@ -118,7 +118,7 @@ def get_organizations_filter():
         FROM elibrary_organizations
         {where_clauses}
     """
-    data = fetch_paginated_options(query=query, label_column="organizationname", value_column="organizationid")
+    data = fetch_paginated_filter_options(query=query, label_column="organizationname", value_column="organizationid")
     return jsonify(data)
 
 
@@ -131,7 +131,7 @@ def get_keywords_filter():
         FROM keywords
         {where_clauses}
     """
-    data = fetch_paginated_options(query=query, label_column="keyword", value_column="itemid")
+    data = fetch_paginated_filter_options(query=query, label_column="keyword", value_column="itemid")
     return jsonify(data)
 
 
@@ -146,5 +146,5 @@ def get_cities_filter():
         {where_clauses}
         ORDER BY lang_priority, town
     """
-    data = fetch_paginated_options(query=query, label_column="town", value_column="town", order_by_label=False)
+    data = fetch_paginated_filter_options(query=query, label_column="town", value_column="town", order_by_label=False)
     return jsonify(data)

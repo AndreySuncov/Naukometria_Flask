@@ -7,6 +7,7 @@ from flask import Blueprint, abort, jsonify, request
 
 from ..database.database import DatabaseService
 from ..entities.datacls import GraphFilter
+from ..utils.database import fetch_paginated
 from ..utils.graph import tuples_to_graph_links, tuples_to_graph_nodes
 
 authors_bp = Blueprint("authors", __name__, url_prefix="/authors")
@@ -38,7 +39,7 @@ def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.curso
                 END                  as lang_priority
         FROM authors a
                 JOIN affiliations aff ON a.id = aff.author
-                JOIN keywords k ON a.itemid = k.itemid
+                LEFT JOIN keywords k ON a.itemid = k.itemid
         {where_clause};
         
         CREATE TEMP TABLE related_authors AS
@@ -61,10 +62,9 @@ def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.curso
                                                     END                  as lang_priority
         FROM authors a
                 JOIN related_authors_ids rela ON a.authorid = rela.authorid
-                JOIN filtered_authors fa ON a.itemid = fa.itemid
         WHERE a.authorid NOT IN (SELECT authorid FROM filtered_authors);
     """
-    where_clauses = ["authorid IS NOT NULL"]
+    where_clauses = ["a.authorid IS NOT NULL"]
     params = []
     if filters.authors:
         where_clauses.append("a.authorid IN %s")
@@ -120,8 +120,7 @@ def get_filtered_authors(filters: AuthorsFilters, cur: psycopg2.extensions.curso
             SELECT * FROM related_authors
         ) a2 ON a1.itemid = a2.itemid
         WHERE a1.authorid < a2.authorid
-        GROUP BY a1.authorid, a2.authorid
-        HAVING COUNT(DISTINCT a1.itemid) >= %s;
+        GROUP BY a1.authorid, a2.authorid;
     """
     cur.execute(query_edges, (min_publications,))
     edges = tuples_to_graph_links(cur.fetchall())
@@ -144,6 +143,76 @@ def get_authors_graph_data():
         with DatabaseService("new_data") as cur:
             graph_data = get_filtered_authors(filters, cur)
             return jsonify(graph_data)
+
+    except Exception as e:  # pylint: disable=broad-except
+        logging.exception(e)
+        return jsonify({"error": str(e)}), 500
+
+
+@authors_bp.route("/table/node", methods=["GET"])
+def get_author_table_nodes():
+    try:
+        authorid = request.args.get("id", "")
+        page = int(request.args.get("page", 1))
+
+        if not authorid:
+            return abort(400, description="authorid is required")
+
+        with DatabaseService("new_data") as cur:
+            query = """
+                SELECT DISTINCT a.itemid as key, i.title, i.year, j.name as journal, i.link
+                FROM authors a
+                JOIN items i ON a.itemid = i.itemid
+                LEFT JOIN journals j ON i.itemid = j.itemid
+                WHERE a.authorid = %s
+                ORDER BY i.year DESC, i.title
+            """
+            rows, has_more = fetch_paginated(query, page=page, items_on_page=5, params=(authorid,), cursor=cur)
+
+            if not cur.description:
+                return abort(500, description="Не удалось получить описание столбцов")
+
+            column_names = [desc[0] for desc in cur.description]
+
+            result = [dict(zip(column_names, row)) for row in rows]
+
+            return jsonify({"items": result, "hasMore": has_more})
+
+    except Exception as e:  # pylint: disable=broad-except
+        logging.exception(e)
+        return jsonify({"error": str(e)}), 500
+
+
+@authors_bp.route("/table/link", methods=["GET"])
+def get_author_table_links():
+    try:
+        source = request.args.get("source", "")
+        target = request.args.get("target", "")
+        page = int(request.args.get("page", 1))
+
+        if not source or not target:
+            return abort(400, description="source and target are required")
+
+        with DatabaseService("new_data") as cur:
+            query = """
+                SELECT DISTINCT a.itemid as key, i.title, i.year, j.name as journal, i.link, a.lastname, a2.lastname
+                FROM authors a
+                        JOIN authors a2 ON a.itemid = a2.itemid
+                        JOIN items i ON a.itemid = i.itemid
+                        LEFT JOIN journals j ON i.itemid = j.itemid
+                WHERE a.authorid = %s
+                AND a2.authorid = %s
+            """
+            rows, has_more = fetch_paginated(query, page=page, items_on_page=5, params=(source, target), cursor=cur)
+
+            if not cur.description:
+                return abort(500, description="Не удалось получить описание столбцов")
+
+            column_names = [desc[0] for desc in cur.description]
+
+            result = [dict(zip(column_names, row)) for row in rows]
+
+            return jsonify({"items": result, "hasMore": has_more})
 
     except Exception as e:  # pylint: disable=broad-except
         logging.exception(e)
