@@ -121,7 +121,7 @@ def get_articles_between_authors():
 
         return jsonify(articles)
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         logging.exception(e)
         return jsonify({"error": str(e)}), 500
 

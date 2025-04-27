@@ -25,7 +25,6 @@ def get_authors_filter():
         ORDER BY 
             (name ~ '^[а-яА-ЯёЁ]') DESC,  -- Сначала кириллица (TRUE идет раньше FALSE)
             name     -- Затем сортировка по алфавиту
-
     """
 
     data = fetch_paginated_filter_options(
