@@ -243,11 +243,14 @@ def get_author_table_links():
             where_clause = " AND ".join(where_clauses)
 
             query = f"""
-                SELECT DISTINCT a1.itemid as key, a1.title, a1.year, a1.journal, a1.link
-                FROM authors_items_view a1
-                JOIN authors_items_view a2 ON a1.itemid = a2.itemid
-                WHERE {where_clause}
-                ORDER BY a1.year DESC, a1.title
+                SELECT *
+                FROM (
+                    SELECT DISTINCT a1.itemid as key, a1.title, a1.year, a1.journal, a1.link
+                    FROM authors_items_view a1
+                    JOIN authors_items_view a2 ON a1.itemid = a2.itemid
+                    WHERE {where_clause}
+                ) AS subquery
+                ORDER BY year DESC, title
             """
 
             rows, has_more = fetch_paginated(query, page=page, items_on_page=5, params=tuple(params), cursor=cur)
