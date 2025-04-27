@@ -187,9 +187,9 @@ def get_author_table_nodes():
                     SELECT DISTINCT ON (itemid) itemid AS key, title, year, journal, link
                     FROM authors_items_view
                     WHERE {where_clause}
-                    ORDER BY itemid, year DESC, title
+                    ORDER BY itemid, year DESC NULLS LAST, title
                 ) AS subquery
-                ORDER BY year DESC, title
+                ORDER BY year DESC NULLS LAST, title, key
             """
 
             rows, has_more = fetch_paginated(
