@@ -7,6 +7,7 @@ from flask import Blueprint, abort, jsonify, request
 
 from ..database.database import DatabaseService
 from ..entities.datacls import GraphFilter
+from ..utils.database import fetch_paginated
 from ..utils.graph import tuples_to_graph_links, tuples_to_graph_nodes
 
 organizations_bp = Blueprint("organizations", __name__, url_prefix="/organizations")
@@ -35,7 +36,7 @@ def get_filtered_organizations(filters: OrganizationsFilters, cur: psycopg2.exte
         FROM elibrary_organizations eo
             JOIN affiliations aff ON aff.affiliationid = eo.organizationid
             JOIN authors a ON aff.author = a.id
-            JOIN keywords k ON a.itemid = k.itemid
+            LEFT JOIN keywords k ON a.itemid = k.itemid
         WHERE k.keyword IN (%s);
         
         CREATE TEMP TABLE orgs_with_min_count AS
@@ -88,6 +89,87 @@ def get_organizations_graph_data():
         with DatabaseService("new_data") as cur:
             graph_data = get_filtered_organizations(filters, cur)
             return jsonify(graph_data)
+
+    except Exception as e:  # pylint: disable=broad-except
+        logging.exception(e)
+        return jsonify({"error": str(e)}), 500
+
+
+@organizations_bp.route("/table/node", methods=["GET"])
+def get_author_table_nodes():
+    try:
+        organizationid = request.args.get("id", "")
+        page = int(request.args.get("page", 1))
+
+        if not organizationid:
+            return abort(400, description="organizationid is required")
+
+        with DatabaseService("new_data") as cur:
+            query = """
+                SELECT DISTINCT a.itemid as key, i.title, i.year, j.name as journal, i.link
+                FROM elibrary_organizations eo
+                        JOIN affiliations aff ON aff.affiliationid = eo.organizationid
+                        JOIN authors a ON aff.author = a.id
+                        JOIN items i ON a.itemid = i.itemid
+                        LEFT JOIN journals j ON a.itemid = j.itemid
+                WHERE eo.organizationid = %s
+                ORDER BY i.year DESC, i.title
+            """
+            rows, has_more = fetch_paginated(query, page=page, items_on_page=5, params=(organizationid,), cursor=cur)
+
+            if not cur.description:
+                return abort(500, description="Не удалось получить описание столбцов")
+
+            column_names = [desc[0] for desc in cur.description]
+
+            result = [dict(zip(column_names, row)) for row in rows]
+
+            return jsonify({"items": result, "hasMore": has_more})
+
+    except Exception as e:  # pylint: disable=broad-except
+        logging.exception(e)
+        return jsonify({"error": str(e)}), 500
+
+
+@organizations_bp.route("/table/link", methods=["GET"])
+def get_author_table_links():
+    try:
+        source = request.args.get("source", "")
+        target = request.args.get("target", "")
+        page = int(request.args.get("page", 1))
+
+        if not source or not target:
+            return abort(400, description="source and target are required")
+
+        with DatabaseService("new_data") as cur:
+            query = """
+                WITH source_publications AS (SELECT DISTINCT eo.organizationid, a.itemid
+                                            FROM elibrary_organizations eo
+                                                    JOIN affiliations aff ON aff.affiliationid = eo.organizationid
+                                                    JOIN authors a ON aff.author = a.id
+                                            WHERE organizationid = %s),
+                    target_publications AS (SELECT DISTINCT eo.organizationid, a.itemid
+                                            FROM elibrary_organizations eo
+                                                    JOIN affiliations aff ON aff.affiliationid = eo.organizationid
+                                                    JOIN authors a ON aff.author = a.id
+                                            WHERE organizationid = %s)
+                SELECT DISTINCT i.itemid as key, i.title, i.year, j.name as journal, i.link
+                FROM source_publications sp
+                        JOIN target_publications tp ON sp.itemid = tp.itemid
+                        JOIN items i ON sp.itemid = i.itemid
+                        LEFT JOIN journals j ON i.itemid = j.itemid
+                ORDER BY i.year DESC, i.title
+            """
+            rows, has_more = fetch_paginated(query, page=page, items_on_page=5, params=(source, target), cursor=cur)
+
+            if not cur.description:
+                return abort(500, description="Не удалось получить описание столбцов")
+
+            column_names = [desc[0] for desc in cur.description]
+
+            result = [dict(zip(column_names, row)) for row in rows]
+
+            return jsonify({"items": result, "hasMore": has_more})
 
     except Exception as e:  # pylint: disable=broad-except
         logging.exception(e)
