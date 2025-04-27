@@ -1051,7 +1051,7 @@ def get_popular_organizations():
     """Получение списка организаций с ID"""
     conn = cur = None
     try:
-        min_publications = validate_int(request.args.get("min_publications"), 1, 10**6, "min_publications") or 50
+        min_publications = validate_int(request.args.get("min_publications"), 1, 10**6, "min_publications") or 200
 
         conn = get_db_connection()
         cur = conn.cursor()
