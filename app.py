@@ -98,7 +98,7 @@ def login():
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, password_hash, avatar, signature FROM new_data.users WHERE username = %s",
+            "SELECT id, password_hash, avatar, signature, name FROM new_data.users WHERE username = %s",
             (username,)
         )
         row = cur.fetchone()
@@ -106,7 +106,7 @@ def login():
         if row is None:
             return jsonify(success=False, message="Неверный логин или пароль"), 401
 
-        user_id, password_hash, avatar_bytes, signature = row
+        user_id, password_hash, avatar_bytes, signature, name = row
 
         if not bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
             return jsonify(success=False, message="Неверный логин или пароль"), 401
@@ -124,7 +124,8 @@ def login():
             message="Успешный вход",
             username=username,
             signature=signature or "",
-            avatar=avatar_data
+            avatar=avatar_data,
+            name=name
         )
 
     except Exception as e:
