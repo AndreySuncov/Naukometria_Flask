@@ -10,7 +10,7 @@ load_dotenv()
 from flask import Flask, Response, abort, jsonify, request, url_for, session
 from flask_cors import CORS
 
-from werkzeug.security import check_password_hash
+import bcrypt
 import base64
 
 from src.database.database import get_db_connection
@@ -103,11 +103,14 @@ def login():
         )
         row = cur.fetchone()
 
-        # Если пользователь не найден или пароль не совпал
-        if row is None or not check_password_hash(row[1], password):
+        if row is None:
             return jsonify(success=False, message="Неверный логин или пароль"), 401
 
-        user_id, _, avatar_bytes, signature = row
+        user_id, password_hash, avatar_bytes, signature = row
+
+        if not bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
+            return jsonify(success=False, message="Неверный логин или пароль"), 401
+
         session["user_id"] = user_id
 
         # Кодируем avatar (BYTEA) в data URL
