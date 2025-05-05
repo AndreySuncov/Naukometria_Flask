@@ -3,9 +3,15 @@ import logging
 from collections import defaultdict
 from datetime import datetime
 from typing import Optional
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
-from flask import Flask, Response, abort, jsonify, request, url_for
+from flask import Flask, Response, abort, jsonify, request, url_for, session
 from flask_cors import CORS
+
+from werkzeug.security import check_password_hash
+import base64
 
 from src.database.database import get_db_connection
 from src.graph import graph_bp
@@ -38,6 +44,12 @@ logging.basicConfig(level=logging.DEBUG, handlers=[handler])
 
 app = Flask(__name__)
 
+secret = os.getenv("FLASK_SECRET_KEY")
+if not secret:
+    raise RuntimeError("FLASK_SECRET_KEY не задан в .env")
+
+app.secret_key = secret
+
 # ------------ DEV ONLY ------------
 CORS(app, resources={r"/*": {"origins": "*"}}, methods=["GET", "POST", "PUT", "DELETE"])
 # ----------------------------------
@@ -67,6 +79,60 @@ def validate_int(value: Optional[str], min_val: int, max_val: int, param_name: s
 def validate_enum(value: Optional[str], allowed_values: set, param_name: str):
     if value and value.lower() not in {v.lower() for v in allowed_values}:
         abort(400, description=f"Invalid {param_name}. Allowed values: {', '.join(allowed_values)}")
+
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify(success=False, message="Некорректный JSON"), 400
+
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+
+    if not username or not password:
+        return jsonify(success=False, message="Логин и пароль обязательны"), 400
+
+    conn = cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, password_hash, avatar, signature FROM new_data.users WHERE username = %s",
+            (username,)
+        )
+        row = cur.fetchone()
+
+        # Если пользователь не найден или пароль не совпал
+        if row is None or not check_password_hash(row[1], password):
+            return jsonify(success=False, message="Неверный логин или пароль"), 401
+
+        user_id, _, avatar_bytes, signature = row
+        session["user_id"] = user_id
+
+        # Кодируем avatar (BYTEA) в data URL
+        avatar_data = None
+        if avatar_bytes:
+            b64 = base64.b64encode(avatar_bytes).decode("ascii")
+            avatar_data = f"data:image/png;base64,{b64}"
+
+        return jsonify(
+            success=True,
+            message="Успешный вход",
+            username=username,
+            signature=signature or "",
+            avatar=avatar_data
+        )
+
+    except Exception as e:
+        app.logger.error(f"Login error: {e}")
+        return jsonify(success=False, message="Внутренняя ошибка сервера"), 500
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 
 @app.route("/api/references/<ref_type>", methods=["GET"])
