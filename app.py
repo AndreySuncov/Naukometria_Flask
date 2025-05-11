@@ -1,10 +1,17 @@
 import json
 import logging
+from collections import defaultdict
 from datetime import datetime
 from typing import Optional
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
-from flask import Flask, Response, abort, jsonify, request, url_for
+from flask import Flask, Response, abort, jsonify, request, url_for, session
 from flask_cors import CORS
+
+import bcrypt
+import base64
 
 from src.database.database import get_db_connection
 from src.graph import graph_bp
@@ -37,6 +44,12 @@ logging.basicConfig(level=logging.DEBUG, handlers=[handler])
 
 app = Flask(__name__)
 
+secret = os.getenv("FLASK_SECRET_KEY")
+if not secret:
+    raise RuntimeError("FLASK_SECRET_KEY не задан в .env")
+
+app.secret_key = secret
+
 # ------------ DEV ONLY ------------
 CORS(app, resources={r"/*": {"origins": "*"}}, methods=["GET", "POST", "PUT", "DELETE"])
 # ----------------------------------
@@ -66,6 +79,64 @@ def validate_int(value: Optional[str], min_val: int, max_val: int, param_name: s
 def validate_enum(value: Optional[str], allowed_values: set, param_name: str):
     if value and value.lower() not in {v.lower() for v in allowed_values}:
         abort(400, description=f"Invalid {param_name}. Allowed values: {', '.join(allowed_values)}")
+
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify(success=False, message="Некорректный JSON"), 400
+
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+
+    if not username or not password:
+        return jsonify(success=False, message="Логин и пароль обязательны"), 400
+
+    conn = cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, password_hash, avatar, signature, name FROM new_data.users WHERE username = %s",
+            (username,)
+        )
+        row = cur.fetchone()
+
+        if row is None:
+            return jsonify(success=False, message="Неверный логин или пароль"), 401
+
+        user_id, password_hash, avatar_bytes, signature, name = row
+
+        if not bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
+            return jsonify(success=False, message="Неверный логин или пароль"), 401
+
+        session["user_id"] = user_id
+
+        # Кодируем avatar (BYTEA) в data URL
+        avatar_data = None
+        if avatar_bytes:
+            b64 = base64.b64encode(avatar_bytes).decode("ascii")
+            avatar_data = f"data:image/png;base64,{b64}"
+
+        return jsonify(
+            success=True,
+            message="Успешный вход",
+            username=username,
+            signature=signature or "",
+            avatar=avatar_data,
+            name=name
+        )
+
+    except Exception as e:
+        app.logger.error(f"Login error: {e}")
+        return jsonify(success=False, message="Внутренняя ошибка сервера"), 500
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 
 @app.route("/api/references/<ref_type>", methods=["GET"])
@@ -531,6 +602,95 @@ def get_author_distribution_by_city():
             cur.close()
         if conn:
             conn.close()
+
+
+@app.route("/api/map/city-connections", methods=["GET"])
+def get_city_connections():
+    keyword_filter = request.args.get("keyword")
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # 1. Фильтр по ключевому слову
+        filtered_itemids = set()
+        if keyword_filter:
+            cur.execute("""
+                        SELECT DISTINCT itemid
+                        FROM new_data.keywords
+                        WHERE keyword ILIKE %s
+                        """, (f"%{keyword_filter}%",))
+            filtered_itemids = {row[0] for row in cur.fetchall()}
+            if not filtered_itemids:
+                return jsonify([])
+
+        # 2. Собираем связи между городами
+        city_connections = defaultdict(int)
+        item_cities = defaultdict(set)
+
+        # Получаем все записи
+        cur.execute("""
+                    SELECT original_city, itemid
+                    FROM new_data.city_publications_mv
+                    """)
+
+        # Группируем по itemid
+        for raw_city, itemid in cur.fetchall():
+            if keyword_filter and itemid not in filtered_itemids:
+                continue
+
+            norm_city = normalize_city_name(raw_city)
+            if norm_city:
+                item_cities[itemid].add(norm_city)
+
+        # Формируем пары городов
+        for itemid, cities in item_cities.items():
+            if len(cities) < 2:
+                continue
+
+            sorted_cities = sorted(cities)
+            for i in range(len(sorted_cities)):
+                for j in range(i + 1, len(sorted_cities)):
+                    pair = (sorted_cities[i], sorted_cities[j])
+                    city_connections[pair] += 1
+
+        # 3. Получаем координаты
+        cur.execute("""
+                    SELECT settlement      AS city,
+                           "latitude(dd)"  AS lat,
+                           "longitude(dd)" AS lon
+                    FROM coordinate_data
+                    """)
+        coords = {row[0].strip(): (row[1], row[2]) for row in cur.fetchall()}
+
+        # 4. Формируем результат
+        result = []
+        for (city_a, city_b), count in city_connections.items():
+            coord_a = coords.get(city_a)
+            coord_b = coords.get(city_b)
+
+            if coord_a and coord_b:
+                result.append({
+                    "cityA": city_a,
+                    "cityB": city_b,
+                    "weight": count,
+                    "coordsA": {"lat": coord_a[0], "lon": coord_a[1]},
+                    "coordsB": {"lat": coord_b[0], "lon": coord_b[1]}
+                })
+
+        # Сортируем по весу связей
+        result.sort(key=lambda x: -x['weight'])
+
+        return Response(
+            json.dumps(result, ensure_ascii=False),
+            mimetype="application/json; charset=utf-8"
+        )
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if 'cur' in locals(): cur.close()
+        if 'conn' in locals(): conn.close()
 
 
 @app.route("/api/map/city-publications", methods=["GET"])
