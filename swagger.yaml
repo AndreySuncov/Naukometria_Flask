@@ -1,0 +1,321 @@
+openapi: 3.0.4
+info:
+  title: Swagger Наукометрия
+  description: |-
+    Эндпоинты приложения для наукометрии
+  version: 1.0.0
+tags:
+  - name: GraphAPI
+    description: Эндпоинты для графа
+paths:
+  /filters/authors:
+    get:
+      tags:
+        - GraphAPI
+      summary: Получение авторов по подстроке
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Поисковый запрос
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Список авторов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        label:
+                          type: string
+                        value:
+                          type: integer
+                  hasMore:
+                    type: boolean
+                  total:
+                    type: integer
+
+  /filters/cited_authors:
+    get:
+      tags:
+        - GraphAPI
+      summary: Получение авторов, которых цитируют
+      parameters:
+        - $ref: "#/paths/~1filters~1authors/get/parameters/0"
+        - $ref: "#/paths/~1filters~1authors/get/parameters/1"
+        - $ref: "#/paths/~1filters~1authors/get/parameters/2"
+      responses:
+        "200":
+          $ref: "#/paths/~1filters~1authors/get/responses/200"
+
+  /filters/citing_authors:
+    get:
+      tags:
+        - GraphAPI
+      summary: Получение авторов, которые цитируют других
+      parameters:
+        - $ref: "#/paths/~1filters~1authors/get/parameters/0"
+        - $ref: "#/paths/~1filters~1authors/get/parameters/1"
+        - $ref: "#/paths/~1filters~1authors/get/parameters/2"
+      responses:
+        "200":
+          $ref: "#/paths/~1filters~1authors/get/responses/200"
+
+  /filters/organizations:
+    get:
+      tags:
+        - GraphAPI
+      summary: Получение списка организаций
+      parameters:
+        - $ref: "#/paths/~1filters~1authors/get/parameters/0"
+        - $ref: "#/paths/~1filters~1authors/get/parameters/1"
+        - $ref: "#/paths/~1filters~1authors/get/parameters/2"
+      responses:
+        "200":
+          $ref: "#/paths/~1filters~1authors/get/responses/200"
+
+  /filters/keywords:
+    get:
+      tags:
+        - GraphAPI
+      summary: Получение ключевых слов
+      parameters:
+        - $ref: "#/paths/~1filters~1authors/get/parameters/0"
+        - $ref: "#/paths/~1filters~1authors/get/parameters/1"
+        - $ref: "#/paths/~1filters~1authors/get/parameters/2"
+      responses:
+        "200":
+          $ref: "#/paths/~1filters~1authors/get/responses/200"
+
+  /filters/cities:
+    get:
+      tags:
+        - GraphAPI
+      summary: Получение списка городов
+      parameters:
+        - $ref: "#/paths/~1filters~1authors/get/parameters/0"
+        - $ref: "#/paths/~1filters~1authors/get/parameters/1"
+        - $ref: "#/paths/~1filters~1authors/get/parameters/2"
+      responses:
+        "200":
+          $ref: "#/paths/~1filters~1authors/get/responses/200"
+
+  /authors/data:
+    post:
+      tags:
+        - GraphAPI
+      summary: Получение графа авторов по фильтрам
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                authors:
+                  type: array
+                  items:
+                    type: integer
+                  description: Список ID авторов
+                organizations:
+                  type: array
+                  items:
+                    type: integer
+                  description: Список ID организаций
+                keywords:
+                  type: array
+                  items:
+                    type: string
+                  description: Список ключевых слов
+                cities:
+                  type: array
+                  items:
+                    type: string
+                  description: Список городов
+                min_publications:
+                  type: string
+                  default: "3"
+                  description: Минимальное количество публикаций
+      responses:
+        "200":
+          description: Успешный ответ с данными графа
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Граф авторов
+        "400":
+          description: Не указан ни один фильтр
+        "500":
+          description: Внутренняя ошибка сервера
+
+  /authors/table/node:
+    post:
+      tags:
+        - GraphAPI
+      summary: Получение таблицы публикаций по автору
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 5
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - authors
+              properties:
+                authors:
+                  type: array
+                  items:
+                    type: integer
+                  description: ID авторов (обязательное поле)
+                organizations:
+                  type: array
+                  items:
+                    type: integer
+                keywords:
+                  type: array
+                  items:
+                    type: string
+                cities:
+                  type: array
+                  items:
+                    type: string
+                min_publications:
+                  type: string
+                  default: "3"
+      responses:
+        "200":
+          description: Список публикаций и флаг hasMore
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key:
+                          type: integer
+                        title:
+                          type: string
+                        year:
+                          type: integer
+                        journal:
+                          type: string
+                        link:
+                          type: string
+                  hasMore:
+                    type: boolean
+        "400":
+          description: Не указан обязательный фильтр authors
+        "500":
+          description: Ошибка сервера
+
+  /authors/table/link:
+    post:
+      tags:
+        - GraphAPI
+      summary: Получение таблицы совместных публикаций между двумя авторами
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 5
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - authors
+              properties:
+                authors:
+                  type: array
+                  minItems: 2
+                  items:
+                    type: integer
+                  description: Два ID авторов (source и target)
+                organizations:
+                  type: array
+                  items:
+                    type: integer
+                keywords:
+                  type: array
+                  items:
+                    type: string
+                cities:
+                  type: array
+                  items:
+                    type: string
+                min_publications:
+                  type: string
+                  default: "3"
+      responses:
+        "200":
+          description: Список совместных публикаций и флаг hasMore
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key:
+                          type: integer
+                        title:
+                          type: string
+                        year:
+                          type: integer
+                        journal:
+                          type: string
+                        link:
+                          type: string
+                  hasMore:
+                    type: boolean
+        "400":
+          description: Требуются два автора (authors)
+        "500":
+          description: Ошибка сервера
