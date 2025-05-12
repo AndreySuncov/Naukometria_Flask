@@ -73,7 +73,7 @@ def get_filtered_references(filters: ReferencesFilters):
         nodes.append({
             "id": str(aid),
             "name": name,
-            "weight": weight
+            "value": weight
         })
 
     # Собираем связи
