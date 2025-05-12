@@ -833,19 +833,34 @@ def get_publications_by_year():
         if year_from > year_to:
             abort(400, description="year_from cannot be greater than year_to")
 
-        conn = get_db_connection()
-        cur = conn.cursor()
+        # === Оригинальный запрос к БД ===
+        # conn = get_db_connection()
+        # cur = conn.cursor()
+        # query = """
+        #     SELECT year, publications_count
+        #     FROM new_data.publications_by_year_mv
+        #     WHERE year BETWEEN %s AND %s
+        #     ORDER BY year
+        # """
+        # cur.execute(query, (year_from, year_to))
+        # result = cur.fetchall()
+        # data = {row[0]: row[1] for row in result}
+        # ==================================================
 
-        query = """
-            SELECT year, publications_count
-            FROM new_data.publications_by_year_mv
-            WHERE year BETWEEN %s AND %s
-            ORDER BY year
-        """
-        cur.execute(query, (year_from, year_to))
-        result = cur.fetchall()
-
-        data = {row[0]: row[1] for row in result}
+        # Мок-данные с возрастающим трендом (2020–2025)
+        mock_data = {
+            2020: 12396,
+            2021: 15803,
+            2022: 17004,
+            2023: 19250,
+            2024: 22647,
+            2025: 11201  
+        }
+        
+        data = {
+            year: count for year, count in mock_data.items()
+            if year_from <= year <= year_to
+        }
 
         return Response(json.dumps(data, ensure_ascii=False), mimetype="application/json; charset=utf-8")
 
