@@ -29,8 +29,6 @@ jobs:
   
             # 2. Сборка фронта
             REPO_DIR=/root/sci-metric
-            rm -rf "$REPO_DIR"
-            git clone git@gitlab.company.com:group/sciencemetrics-front.git "$REPO_DIR"
             cd "$REPO_DIR"
             git checkout dev
             npm ci
