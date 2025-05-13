@@ -17,18 +17,19 @@ jobs:
           script: |
             # 1. Синхронизация из GitLab
             cd /root || exit
-            if [ ! -d sciencemetrics-front ]; then
-              git clone --mirror https://devops.fa.ru/crpo/sci-metric.git
-              cd sciencemetrics-front
+            REPO_DIR=/root/sci-metric
+            
+            if [ ! -d "$REPO_DIR" ]; then
+              git clone https://devops.fa.ru/crpo/sci-metric.git
+              cd "$REPO_DIR"
               git remote add github ssh://git@github.com/Redegit/sciencemetrics-front.git
             else
-              cd sciencemetrics-front
+              cd "$REPO_DIR"
               git remote update
             fi
-            git push --mirror github
+            git push github
   
             # 2. Сборка фронта
-            REPO_DIR=/root/sci-metric
             cd "$REPO_DIR"
             git checkout dev
             npm ci
