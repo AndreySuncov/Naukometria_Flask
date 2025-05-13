@@ -21,7 +21,6 @@ jobs:
           
             cd /root || exit
           
-            # === СИНХРОНИЗАЦИЯ И PUSH ===
             UPDATE_FRONTEND=0
           
             if [ ! -d "$REPO_DIR" ]; then
@@ -33,10 +32,12 @@ jobs:
               cd "$REPO_DIR"
               git remote update
           
-              LOCAL_HASH=$(git for-each-ref --format="%(objectname)" refs/remotes/origin/dev)
-              REMOTE_HASH=$(git ls-remote origin refs/heads/dev | awk '{ print $1 }')
+              git fetch origin
+              git fetch github
           
-              if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
+              DIFF=$(git diff refs/remotes/origin/dev refs/remotes/github/dev)
+          
+              if [ "$DIFF" ]; then
                 UPDATE_FRONTEND=1
               fi
             fi
@@ -45,7 +46,6 @@ jobs:
               echo "Changes detected, pushing and building frontend"
               git push --mirror github
           
-              # === СБОРКА ФРОНТА ===
               rm -rf "$FRONTEND_DIR"
               git clone https://github.com/Redegit/sciencemetrics-front.git "$FRONTEND_DIR"
               cd "$FRONTEND_DIR"
@@ -53,19 +53,7 @@ jobs:
               npm ci
               npm run build
           
-              # === КОПИРОВАНИЕ dist ===
               rm -rf "$BUILD_DIR/dist"
               cp -r dist "$BUILD_DIR/"
             else
-              echo "No changes in frontend. Skipping build."
-            fi
-          
-            # === ВСЕГДА: БЭКЕНД ===
-            cd "$BUILD_DIR"
-            git pull origin main
-            source /root/venv/bin/activate
-            pip install -r requirements.txt
-            sudo systemctl daemon-reload
-            sudo systemctl restart flask-app
-  
 
