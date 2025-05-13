@@ -60,4 +60,14 @@ jobs:
               rm -rf "$BUILD_DIR/dist"
               cp -r dist "$BUILD_DIR/"
             else
-
+              echo "No changes in frontend. Skipping build."
+            fi
+          
+            # === ВСЕГДА: БЭКЕНД ===
+            cd "$BUILD_DIR"
+            git pull origin main
+            source /root/venv/bin/activate
+            pip install -r requirements.txt
+            sudo systemctl daemon-reload
+            sudo systemctl restart flask-app
+  
