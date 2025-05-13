@@ -15,9 +15,42 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            # 1. Синхронизация из GitLab
+            cd /root || exit
+            pwd
+
+            REPO_DIR="/root/sci-metric.git"
+            if [ ! -d $REPO_DIR ]; then
+              echo "no repo"
+              git clone --mirror https://devops.fa.ru/crpo/sci-metric.git
+              cd "$REPO_DIR"
+              git remote add github https://github.com/Redegit/sciencemetrics-front.git
+            else
+              echo "has repo"
+              cd "$REPO_DIR"
+              git remote update
+            fi
+            echo "pushing"
+            git push --mirror github
+  
+            # 2. Сборка фронта
+            rm -rf sci-metric.git 
+            git clone https://github.com/Redegit/sciencemetrics-front.git
+            cd sciencemetrics-front
+            git checkout dev
+            npm ci
+            npm run build
+  
+            # 3. Копирование dist
+            rm -rf /root/Naukometria_Flask/dist
+            cp -r dist /root/Naukometria_Flask/
+            rm -rf sciencemetrics-front
+  
+            # 4. Бэкенд деплой
             cd /root/Naukometria_Flask
             git pull origin main
             source /root/venv/bin/activate
-            pip install -r /root/Naukometria_Flask/requirements.txt
+            pip install -r requirements.txt
             sudo systemctl daemon-reload
             sudo systemctl restart flask-app
+
