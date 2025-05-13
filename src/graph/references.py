@@ -70,11 +70,14 @@ def get_filtered_references(filters: ReferencesFilters):
     for aid in unique_ids:
         name = author_names.get(aid, f"Author {aid}")
         weight = cited_weights.get(aid, 0) or citing_weights.get(aid, 0)
-        nodes.append({
-            "id": str(aid),
-            "name": name,
-            "value": weight
-        })
+        nodes.append(
+            {
+                "id": str(aid),
+                "name": name,
+                "value": weight,
+                "category": 1 if aid in (filters.authors + filters.citing_authors) else 0,
+            }
+        )
 
     # Собираем связи
     links = [
@@ -89,7 +92,10 @@ def get_filtered_references(filters: ReferencesFilters):
     return {
         "nodes": nodes,
         "links": links,
-        "categories": [{"name": "Автор"}]
+        "categories": [
+            {"name": "Автор"},
+            {"name": "Отфильтрованные авторы"},
+        ]
     }
 
 
