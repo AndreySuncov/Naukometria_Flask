@@ -33,7 +33,7 @@ jobs:
               cd "$REPO_DIR"
               git remote update
           
-              LOCAL_HASH=$(git rev-parse origin/dev)
+              LOCAL_HASH=$(git for-each-ref --format="%(objectname)" refs/remotes/origin/dev)
               REMOTE_HASH=$(git ls-remote origin refs/heads/dev | awk '{ print $1 }')
           
               if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
