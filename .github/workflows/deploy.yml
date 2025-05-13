@@ -24,7 +24,7 @@ jobs:
               echo "no repo"
               git clone https://devops.fa.ru/crpo/sci-metric.git
               cd "$REPO_DIR"
-              git remote add github ssh://git@github.com/Redegit/sciencemetrics-front.git
+              git remote add github https://github.com/Redegit/sciencemetrics-front.git
             else
               echo "has repo"
               cd "$REPO_DIR"
