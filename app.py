@@ -1,24 +1,22 @@
+import base64
 import json
 import logging
+import os
 from collections import defaultdict
 from datetime import datetime
+from io import BytesIO
 from typing import Optional
-import os
-from dotenv import load_dotenv
-load_dotenv()
-
-from flask import Flask, Response, abort, jsonify, request, url_for, session
-from flask_cors import CORS
 
 import bcrypt
-import base64
+import pandas as pd
+from dotenv import load_dotenv
+from flask import Flask, Response, abort, jsonify, request, send_file, session, url_for
+from flask_cors import CORS
 
 from src.database.database import get_db_connection
 from src.graph import graph_bp
 
-import pandas as pd
-from io import BytesIO
-from flask import send_file
+load_dotenv()
 
 RESET = "\033[0m"
 COLORS = {
