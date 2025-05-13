@@ -34,10 +34,14 @@ jobs:
           
               git fetch origin
               git fetch github
-          
-              DIFF=$(git diff refs/remotes/origin/dev refs/remotes/github/dev)
-          
-              if [ "$DIFF" ]; then
+
+              if git show-ref -q refs/heads/dev && git show-ref -q refs/remotes/github/dev; then
+                DIFF=$(git diff refs/heads/dev refs/remotes/github/dev)
+                if [ "$DIFF" ]; then
+                  UPDATE_FRONTEND=1
+                fi
+              else
+                echo "One of the refs is missing, assuming changes."
                 UPDATE_FRONTEND=1
               fi
             fi
