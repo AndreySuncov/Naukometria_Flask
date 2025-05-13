@@ -10,7 +10,7 @@ from typing import Optional
 import bcrypt
 import pandas as pd
 from dotenv import load_dotenv
-from flask import Flask, Response, abort, jsonify, request, send_file, session, url_for
+from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory, session, url_for
 from flask_cors import CORS
 
 from src.database.database import get_db_connection
@@ -1337,9 +1337,20 @@ def not_found(error):
 app.register_blueprint(graph_bp)
 
 
+@app.route("/assets/<path:path>")
+def serve_static(path):
+    return send_from_directory("dist/assets", path)
+
 @app.route("/")
-def home():
-    return "API для ВКР 'Наукометрическая система', Андрей Сунцов, Преснухин Дмитрий, Мерзлова Анастасия, Егорова Ева"
+def serve():
+    return send_from_directory("dist", "index.html")
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_all(path):
+    if path.startswith("api"):
+        return abort(404)
+    return send_from_directory("dist", "index.html")
 
 
 if __name__ == "__main__":
