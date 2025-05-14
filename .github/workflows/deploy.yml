@@ -15,59 +15,9 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            REPO_DIR="/root/sci-metric.git"
-            FRONTEND_DIR="/root/sciencemetrics-front"
-            BUILD_DIR="/root/Naukometria_Flask"
-          
-            cd /root || exit
-          
-            UPDATE_FRONTEND=0
-          
-            if [ ! -d "$REPO_DIR" ]; then
-              git clone --mirror https://devops.fa.ru/crpo/sci-metric.git "$REPO_DIR"
-              cd "$REPO_DIR"
-              git remote add github https://github.com/Redegit/sciencemetrics-front.git
-              UPDATE_FRONTEND=1
-            else
-              cd "$REPO_DIR"
-              git remote update
-          
-              git fetch origin
-              git fetch github
-
-              if git show-ref -q refs/heads/dev && git show-ref -q refs/remotes/github/dev; then
-                DIFF=$(git diff refs/heads/dev refs/remotes/github/dev)
-                if [ "$DIFF" ]; then
-                  UPDATE_FRONTEND=1
-                fi
-              else
-                echo "One of the refs is missing, assuming changes."
-                UPDATE_FRONTEND=1
-              fi
-            fi
-          
-            if [ "$UPDATE_FRONTEND" = "1" ]; then
-              echo "Changes detected, pushing and building frontend"
-              git push --mirror github
-          
-              rm -rf "$FRONTEND_DIR"
-              git clone https://github.com/Redegit/sciencemetrics-front.git "$FRONTEND_DIR"
-              cd "$FRONTEND_DIR"
-              git checkout dev
-              npm ci
-              npm run build
-          
-              rm -rf "$BUILD_DIR/dist"
-              cp -r dist "$BUILD_DIR/"
-            else
-              echo "No changes in frontend. Skipping build."
-            fi
-          
-            # === ВСЕГДА: БЭКЕНД ===
-            cd "$BUILD_DIR"
+            cd /root/Naukometria_Flask
             git pull origin main
             source /root/venv/bin/activate
-            pip install -r requirements.txt
+            pip install -r /root/Naukometria_Flask/requirements.txt
             sudo systemctl daemon-reload
             sudo systemctl restart flask-app
-  
